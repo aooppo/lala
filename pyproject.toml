@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lady-lala-workflow"
+version = "0.1.0"
+description = "Reproducible, provider-neutral Lady LaLa static-image generation workflow"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "Pillow>=10.4,<13",
+  "PyYAML>=6.0.2,<7",
+  "runwayml==5.14.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3,<9",
+]
+
+[project.scripts]
+lala-workflow = "lala_workflow.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "-ra --import-mode=importlib"
+pythonpath = ["src"]
+testpaths = ["tests"]

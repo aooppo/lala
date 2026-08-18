@@ -1,0 +1,10 @@
+presets:
+  home_decor:
+    purpose: Generate Lady LaLa inside the approved Decorolala home-decor environment.
+    references:
+      - face
+      - full_body
+      - scene
+    prompt_file: prompts/home-decor-v1.txt
+    default_count: 5
+    default_ratio: "1920:1080"

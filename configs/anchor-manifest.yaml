@@ -1,0 +1,40 @@
+project: lady-lala
+anchor_set_version: "1.0"
+status: approved
+
+anchors:
+  face:
+    path: assets/approved_anchors/face/lala-face-front.png
+    role: facial_identity
+    tag: lala_face
+    priority: 1
+    generation_input: true
+
+  full_body:
+    path: assets/approved_anchors/full_body/lala-red-gown-full-body.png
+    role: body_proportions_wardrobe_and_jewelry
+    tag: lala_look
+    priority: 2
+    generation_input: true
+
+  scene:
+    path: assets/approved_anchors/scene/lala-home-decor-scene.png
+    role: environment_style
+    tag: lala_scene
+    priority: 3
+    generation_input: true
+
+qa_references:
+  character_sheet:
+    path: assets/approved_anchors/scene/lady-lala-character-sheet-exploration-v0.8.png
+    role: qa_character_sheet
+    tag: qa_sheet
+    priority: 10
+    generation_input: false
+
+  wardrobe_b:
+    path: assets/approved_anchors/scene/lady-lala-wardrobe-b-v0.6.png
+    role: qa_wardrobe_variation
+    tag: qa_wardrobe
+    priority: 11
+    generation_input: false

@@ -1,0 +1,59 @@
+provider: runway
+model: gen4_image
+ratio: "1080:1440"
+
+limits:
+  max_outputs_per_run: 10
+  max_concurrency: 2
+  max_retries: 3
+  poll_timeout_seconds: 900
+  overall_timeout_seconds: 1800
+  network_timeout_seconds: 60
+  download_timeout_seconds: 60
+  allow_live_calls: false
+  estimated_credits_per_output: null
+  max_estimated_credits: null
+
+providers:
+  runway:
+    api_version: "2024-11-06"
+    sdk_version: "5.14.0"
+    endpoint: /v1/text_to_image
+    poll_endpoint: /v1/tasks/{id}
+    poll_interval_seconds: 5
+    supported_models:
+      - gen4_image
+      - gen4_image_turbo
+    supported_ratios:
+      - "1024:1024"
+      - "1080:1080"
+      - "1168:880"
+      - "1360:768"
+      - "1440:1080"
+      - "1080:1440"
+      - "1808:768"
+      - "1920:1080"
+      - "1080:1920"
+      - "2112:912"
+      - "1280:720"
+      - "720:1280"
+      - "720:720"
+      - "960:720"
+      - "720:960"
+      - "1680:720"
+    model_capabilities:
+      gen4_image:
+        min_references: 0
+        max_references: 3
+        supports_seed: true
+      gen4_image_turbo:
+        min_references: 1
+        max_references: 3
+        supports_seed: true
+    seed_min: 0
+    seed_max: 4294967295
+    tag_pattern: "^[a-z][a-z0-9_]+$"
+    tag_min_length: 3
+    tag_max_length: 16
+    prompt_utf16_max: 1000
+    data_uri_max_chars: 5242880

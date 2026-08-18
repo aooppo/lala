@@ -1,0 +1,18 @@
+presets:
+  baseline_identity:
+    purpose: Verify Lady LaLa identity before introducing a complex environment.
+    references:
+      - face
+      - full_body
+    prompt_file: prompts/baseline-identity-v1.txt
+    default_count: 10
+    default_ratio: "1080:1440"
+
+  product_page_clean:
+    purpose: Create clean Lady LaLa images suitable for web and product-page composition.
+    references:
+      - face
+      - full_body
+    prompt_file: prompts/product-page-clean-v1.txt
+    default_count: 5
+    default_ratio: "1080:1440"

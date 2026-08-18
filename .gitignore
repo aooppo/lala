@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
+
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Runtime artifacts
+runs/*
+!runs/.gitkeep
+outputs/*
+!outputs/.gitkeep
+!outputs/approved_keyframes/
+outputs/approved_keyframes/*
+!outputs/approved_keyframes/.gitkeep
+assets/derived/*
+!assets/derived/.gitkeep
+
+# Local agent/private state
+.agents/private/
+.agents/**/*.local.*
+
+# Editors and OS
+.DS_Store
+Thumbs.db
+*.swp
+*.tmp
+.idea/
+.vscode/

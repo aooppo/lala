@@ -11,6 +11,23 @@ def configure_parser(subparsers: Any) -> None:
     validate = commands.add_parser("validate", help="validate video inputs and configuration")
     _project_root(validate)
 
+    voice = commands.add_parser("voice", help="verify or inspect the approved Lady LaLa voice")
+    voice_commands = voice.add_subparsers(dest="voice_command", required=True)
+    voice_verify = voice_commands.add_parser("verify", help="read-only verify the approved voice")
+    _project_root(voice_verify)
+    voice_source = voice_verify.add_mutually_exclusive_group(required=True)
+    voice_source.add_argument("--voice-id")
+    voice_source.add_argument("--voice-id-env", choices=("HEYGEN_VOICE_ID",))
+    voice_preview = voice_commands.add_parser(
+        "download-preview", help="download one unapproved voice preview for human review"
+    )
+    _project_root(voice_preview)
+    voice_preview.add_argument("--voice-id", required=True)
+    voice_init = voice_commands.add_parser(
+        "init-env", help="explicitly migrate legacy voice_id to HEYGEN_VOICE_ID"
+    )
+    _project_root(voice_init)
+
     smoke = commands.add_parser("talking-smoke-test", help="preview or run one short talking test")
     _project_root(smoke)
     smoke.add_argument("--preset", required=True, choices=("product_page", "tooltip", "homepage"))
@@ -20,7 +37,20 @@ def configure_parser(subparsers: Any) -> None:
     smoke.add_argument("--variations", type=int)
     smoke.add_argument("--smoke-run-id")
     smoke.add_argument("--smoke-review-file")
+    _budgets(smoke)
     _mode(smoke)
+
+    motion_smoke = commands.add_parser(
+        "motion-smoke-test", help="preview or run one independent Runway motion test"
+    )
+    _project_root(motion_smoke)
+    motion_smoke.add_argument("--keyframe", required=True)
+    motion_smoke.add_argument("--model", default="gen4_turbo")
+    motion_smoke.add_argument("--duration", type=int, default=5)
+    motion_smoke.add_argument("--ratio", default="1280:720")
+    motion_smoke.add_argument("--variations", type=int, default=1)
+    _budgets(motion_smoke)
+    _mode(motion_smoke)
 
     generate = commands.add_parser("generate", help="preview or generate shot alternatives")
     _project_root(generate)
@@ -28,9 +58,20 @@ def configure_parser(subparsers: Any) -> None:
     generate.add_argument("--single-shot", action="store_true")
     generate.add_argument("--smoke-run-id")
     generate.add_argument("--smoke-review-file")
+    generate.add_argument("--motion-smoke-run-id")
+    generate.add_argument("--motion-smoke-review-file")
     generate.add_argument("--talking-variations", type=int)
     generate.add_argument("--motion-variations", type=int)
+    _budgets(generate)
     _mode(generate)
+
+    keyframe = commands.add_parser("keyframe", help="derive review-only keyframe candidates")
+    keyframe_commands = keyframe.add_subparsers(dest="keyframe_command", required=True)
+    talking_crop = keyframe_commands.add_parser(
+        "derive-talking-crop", help="create an unapproved deterministic talking crop"
+    )
+    _project_root(talking_crop)
+    talking_crop.add_argument("--source", required=True)
 
     assemble = commands.add_parser("assemble", help="assemble explicitly selected shots")
     _project_root(assemble)
@@ -66,3 +107,9 @@ def _mode(parser: argparse.ArgumentParser) -> None:
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--dry-run", action="store_true")
     mode.add_argument("--live", action="store_true")
+
+
+def _budgets(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--max-provider-cost-usd", type=float)
+    parser.add_argument("--max-runway-credits", type=float)
+    parser.add_argument("--accept-unknown-provider-cost", action="store_true")

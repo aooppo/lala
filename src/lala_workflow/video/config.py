@@ -27,6 +27,7 @@ from .validation import (
 
 REQUIRED_PRESETS = ("product_page", "tooltip", "homepage")
 SUPPORTED_SHOT_KINDS = {"talking", "motion", "graphic", "local"}
+USABLE_VOICE_APPROVALS = {"approved_for_smoke", "production_approved"}
 
 
 class VideoConfigError(ConfigError):
@@ -147,27 +148,58 @@ def _parse_voice_profile(
     approval = str(data.get("approval_status") or "pending")
     if mode not in {"pending", "approved_audio", "cloned_voice"}:
         raise VideoConfigError("voice mode must be pending, approved_audio, or cloned_voice")
-    if approval not in {"pending", "approved"}:
-        raise VideoConfigError("voice approval_status must be pending or approved")
+    if approval == "approved":
+        approval = "production_approved"
+    if approval not in {
+        "pending",
+        "verified",
+        "approved_for_smoke",
+        "production_approved",
+        "rejected",
+    }:
+        raise VideoConfigError(
+            "voice approval_status must be pending, verified, approved_for_smoke, "
+            "production_approved, or rejected"
+        )
     script_audio = data.get("script_audio") or {}
     if not isinstance(script_audio, Mapping):
         raise VideoConfigError("voice script_audio must be a mapping")
     canonical_manifest, canonical_manifest_sha256, canonical_sources = (
         _parse_canonical_voice_sources(data, root)
     )
-    if mode == "pending" or approval != "approved":
+    if mode == "pending" or approval not in USABLE_VOICE_APPROVALS:
         blockers.append(
             "Goal 2 still requires a real approved HeyGen Starfish/private Lady LaLa voice "
             "profile or approved per-script Lady LaLa narration WAVs."
         )
-    if mode == "approved_audio" and approval == "approved" and not script_audio:
+    if mode == "approved_audio" and approval in USABLE_VOICE_APPROVALS and not script_audio:
         blockers.append("approved WAV mappings are required for each selected MTL script")
-    if mode == "cloned_voice" and approval == "approved":
+    if mode == "cloned_voice" and approval in USABLE_VOICE_APPROVALS:
         missing = [name for name in ("voice_version", "provider", "model", "voice_id") if not data.get(name)]
         if missing:
             raise VideoConfigError(
                 f"approved cloned voice profile is missing: {', '.join(missing)}"
             )
+        # A smoke approval must always carry the read-only verification evidence.
+        # Legacy/fixture profiles using the historical ``approved`` alias are
+        # normalized to ``production_approved`` above and are intentionally
+        # accepted here for backwards-compatible offline provider fixtures;
+        # production promotion still has its independent human-review gate.
+        if approval == "approved_for_smoke":
+            verification_missing = [
+                name
+                for name in ("verification_run_id", "verification_time", "voice_name")
+                if not data.get(name)
+            ]
+            if verification_missing:
+                raise VideoConfigError(
+                    "approved-for-smoke voice profile is missing verification evidence: "
+                    + ", ".join(verification_missing)
+                )
+            if data.get("engine") != "starfish" or data.get("type") != "private":
+                raise VideoConfigError(
+                    "approved-for-smoke voice must be verified as private and Starfish-compatible"
+                )
     approved_audio = _optional_voice_path(data.get("approved_audio"), root, "approved")
     source_audio = _optional_voice_path(data.get("source_audio"), root, "source")
     return VoiceProfile(
@@ -191,6 +223,18 @@ def _parse_voice_profile(
         output_format=str(data.get("output_format") or "wav").lower(),
         sample_rate=_optional_int(data.get("sample_rate"), "voice sample_rate"),
         approval_status=approval,
+        gender=_optional_str(data.get("gender")),
+        locale=_optional_str(data.get("locale")),
+        engine=_optional_str(data.get("engine")),
+        voice_type=_optional_str(data.get("type")),
+        created_at=_optional_str(data.get("created_at")),
+        voice_name=_optional_str(data.get("voice_name")),
+        owner_supplied_voice_id=data.get("owner_supplied_voice_id") is True,
+        verification_run_id=_optional_str(data.get("verification_run_id")),
+        verification_time=_optional_str(data.get("verification_time")),
+        profile_version=_optional_str(data.get("profile_version")),
+        approval_scope=_optional_str(data.get("approval_scope")),
+        owner_reference=_optional_str(data.get("owner_reference")),
     )
 
 
@@ -405,7 +449,7 @@ def _parse_providers(
 def _validate_voice_provider_configuration(
     profile: VoiceProfile, providers: Mapping[str, ProviderDefinition]
 ) -> None:
-    if profile.mode != "cloned_voice" or profile.approval_status != "approved":
+    if profile.mode != "cloned_voice" or profile.approval_status not in USABLE_VOICE_APPROVALS:
         return
     definition = providers.get(str(profile.provider or ""))
     if definition is None or definition.responsibility != "voice":
@@ -535,7 +579,7 @@ def _parse_presets(
 def _validate_script_audio_links(
     profile: VoiceProfile, scripts: Mapping[str, Any], blockers: list[str]
 ) -> None:
-    if profile.approval_status != "approved":
+    if profile.approval_status not in USABLE_VOICE_APPROVALS:
         return
     required = REQUIRED_PRESETS if profile.mode == "approved_audio" else tuple(profile.script_audio)
     for script_id in required:

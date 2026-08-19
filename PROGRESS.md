@@ -477,3 +477,58 @@
   budget permission, exact live flags, and staged human review can become relevant.
 - Paid calls made: 0 for this import and offline-validation checkpoint; the earlier authorized
   Goal 1 image call remains outside this Goal 2 task.
+
+## Goal 2 Checkpoint 11 — Production-readiness completion and read-only Voice Verify
+
+- Provider contracts: HeyGen asset uploads now use streamed `multipart/form-data` with the
+  canonical `file` field, one `x-api-key` header, content/endpoint/mime-scoped idempotency, bounded
+  `409 request_in_progress`/`429` handling, current `failure_code`/`failure_message` fields, and
+  run-local asset reuse without reusing video tasks. Runway translation omits optional empty prompt
+  text, enforces the 5 MB prompt-image bound, and preserves estimated versus terminal actual
+  credits.
+- Independent motion stage: `video motion-smoke-test` now works without voice/script approval,
+  supports the exact one-result five-second `gen4_turbo` gate at no more than 25 credits, records
+  task/cost/hash/FFprobe data, first/middle/last frames, a contact sheet, and a blank QA row. The
+  command was previewed successfully at `LALA-VIDEO-20260819-142903-MOTION-SMOKE-001` with zero
+  submissions.
+- Budget/media/graphics: every real live entry point checks an explicit ceiling before provider
+  construction and each submission; unknown costs remain null unless explicitly accepted. FFprobe
+  now records container, codecs, pixel format, frame rate, audio stream, sample rate, channels,
+  and bit rate. Tooltip local graphics are deterministic exact-caption PNG drafts under
+  `outputs/graphics/`, actually overlaid by FFmpeg, labeled `REVIEW_READY_DRAFT_ASSETS`, and
+  rejected by promotion. `derive-talking-crop` creates only a hashed, unapproved candidate under
+  `outputs/keyframes/derived/`. Full live generation additionally requires a reviewed motion-smoke
+  copy with matching keyframe hash.
+- QA/schema: blank rows now include visual identity, face/age/hair/body, wardrobe/jewelry,
+  lip-sync/mouth/teeth/eyes, background/motion, audio identity/pronunciation/script match,
+  audio-video sync, technical export, MTL readiness, reviewer/time, and notes. Run evidence remains
+  append-only and reviewed copies remain under `outputs/reviews/`.
+- Voice Verify: read-only HeyGen verification succeeded as
+  `LALA-VOICE-VERIFY-20260819-141633-001` for voice ID
+  `7a738e1ced454de6b92d2c76a6ccb8c0`, `Lady LaLa v1`, `female`, `English`, `private`, and
+  `starfish`. The safe result was `VERIFIED_FOR_SMOKE`; no voice mutation, speech synthesis, or
+  video call occurred. `configs/voice-profile.yaml` records `approved_for_smoke`, verification
+  run/time, and API-derived metadata; production approval remains human-gated.
+- Offline verification: `uv sync --extra dev` resolved 24 packages/checked 23; full suite
+  `uv run pytest -q` passed **181 tests**; compileall passed; Goal 1 validation plus 10/5/5 dry
+  runs passed at `LALA-RUNWAY-20260819-142850-BASELINE-IDENTITY-001`,
+  `LALA-RUNWAY-20260819-142850-HOME-DECOR-001`, and
+  `LALA-RUNWAY-20260819-142850-PRODUCT-PAGE-CLEAN-001`. Goal 2 validation and tooltip,
+  product-page, homepage, and talking/motion smoke previews passed with zero provider submissions:
+  `LALA-VIDEO-20260819-142902-TOOLTIP-001`,
+  `LALA-VIDEO-20260819-142902-PRODUCT-PAGE-001`,
+  `LALA-VIDEO-20260819-142903-TOOLTIP-001`,
+  `LALA-VIDEO-20260819-142903-HOMEPAGE-001`, and
+  `LALA-VIDEO-20260819-142903-MOTION-SMOKE-001`; each run has the exact thirteen-artifact bundle.
+- Integrity/security: the five approved-anchor hashes remain exactly the Checkpoint 1 baseline;
+  all three script hashes, the imported keyframe hash, and all eight canonical WAV hashes match
+  their manifests. Run/output scans found no credentials, Bearer values, authorization headers,
+  signed query strings, or data URIs; no runtime media is tracked; CI still disables dotenv,
+  installs FFmpeg, compiles, and runs the offline suite; `git diff --check` passed.
+- Live truth: `OFFLINE_COMPLETE`; `VOICE_VERIFIED`; `MOTION_SMOKE_SUCCEEDED=NOT_RUN`;
+  `TALKING_SMOKE_SUCCEEDED=NOT_RUN`; `TOOLTIP_E2E_SUCCEEDED=NOT_RUN`.
+  The exact live flags were not enabled, so no Runway motion task, HeyGen speech request, HeyGen
+  talking task, or Tooltip E2E was attempted. Human motion/talking QA, approved brand assets (if
+  promotion is required), and the separately reviewed motion-smoke copy remain external gates.
+- Paid calls made: **0** for this checkpoint and this Goal 2 task. The read-only Voice Verify is
+  not a paid generation call; the earlier authorized Goal 1 image call remains outside Goal 2.

@@ -42,14 +42,23 @@ Unknown values remain null. A known component includes provider, model, generate
 attempts, successes/failures, amount, estimated/actual basis, currency, pricing URL, and pricing
 date.
 
+`request.json` also records the operator-supplied USD/credit ceilings and whether one unknown-cost
+call was accepted. Budget checks occur before provider construction and before each upload,
+speech, talking-video, or Runway submission. Local editing cost is never mixed into provider cost.
+
 ## QA CSV header
 
 ```csv
-run_id,video_id,preset,candidate,visual_identity_pass,face_stability_pass,hair_pass,wardrobe_pass,jewelry_pass,lip_sync_pass,mouth_teeth_pass,eye_motion_pass,audio_quality_pass,audio_sync_pass,background_pass,motion_quality_pass,script_exact_match_pass,technical_export_pass,mtl_review_ready,reviewer,reviewed_at,notes
+run_id,video_id,preset,candidate,visual_identity,face_stability,age_stability,hair_stability,body_proportions,wardrobe,jewelry,lip_sync,mouth,teeth,eyes,background,motion,audio_identity,pronunciation,script_match,audio_video_sync,technical_export,mtl_review_ready,reviewer,reviewed_at,notes
 ```
 
 The first four fields are populated. All remaining fields are empty for each new candidate. The
 system never infers a pass or approval.
+
+Smoke provider results also reference FFprobe evidence (container, duration, dimensions, codecs,
+pixel format, average frame rate, audio presence, sample rate, channels, and bit rate) plus hashes
+for first/middle/last frames and a contact sheet. Provider source URLs are query-stripped; partial
+downloads are never renamed to final artifacts.
 
 ## Deterministic names
 

@@ -19,7 +19,8 @@ Missing production inputs are reported together with paths and required metadata
 python -m lala_workflow video talking-smoke-test \
   --preset PRESET (--dry-run | --live) \
   [--provider NAME] [--audio PATH] [--keyframe ID] [--variations N] \
-  [--smoke-run-id RUN_ID] [--smoke-review-file PATH]
+  [--smoke-run-id RUN_ID] [--smoke-review-file PATH] \
+  [--max-provider-cost-usd USD] [--accept-unknown-provider-cost]
 ```
 
 - `--dry-run` resolves at most three alternatives but submits none.
@@ -33,17 +34,60 @@ python -m lala_workflow video talking-smoke-test \
 - Audio duration must be eight to twelve seconds for the live technical validation.
 - The output is a video run ID and evidence path.
 
+## Verify or preview the configured voice
+
+```bash
+python -m lala_workflow video voice verify \
+  (--voice-id ID | --voice-id-env HEYGEN_VOICE_ID)
+
+python -m lala_workflow video voice download-preview --voice-id ID
+python -m lala_workflow video voice init-env
+```
+
+`verify` performs only read operations, requires the exact configured Lady LaLa ID/name plus
+private Starfish membership, stores only safe fields and a query-stripped preview URL, and returns
+`VERIFIED_FOR_SMOKE` rather than production approval. `download-preview` is a separate explicit
+operation whose derived output lives under `outputs/audio/voice_preview/<run_id>/`. `init-env`
+performs an explicit lowercase `voice_id` to `HEYGEN_VOICE_ID` migration without printing the
+value; no command silently accepts the lowercase name.
+
+## Independent motion smoke
+
+```bash
+python -m lala_workflow video motion-smoke-test \
+  --keyframe ID --model gen4_turbo --duration 5 --ratio 1280:720 \
+  --variations 1 --max-runway-credits 25 (--dry-run | --live)
+```
+
+Dry-run plans exactly one request and makes no provider call. Live requires the general video
+permission, `VIDEO_MOTION_LIVE_SMOKE_TEST=true`, a Runway credential, an explicit cap no greater
+than 25 credits, and exactly one output. It does not load or validate HeyGen, voice, narration, or
+talking-review state.
+
+## Derive a talking crop candidate
+
+```bash
+python -m lala_workflow video keyframe derive-talking-crop --source KEYFRAME_ID
+```
+
+This creates a derived, unapproved candidate with source/output hashes and crop coordinates. It
+never modifies or promotes the approved source.
+
 ## Generate shot alternatives
 
 ```bash
 python -m lala_workflow video generate \
   --preset {tooltip,product_page,homepage} (--dry-run | --live) \
   [--single-shot] [--smoke-run-id RUN_ID] [--smoke-review-file PATH] \
-  [--talking-variations N] [--motion-variations N]
+  [--motion-smoke-run-id RUN_ID] [--motion-smoke-review-file PATH] \
+  [--talking-variations N] [--motion-variations N] \
+  [--max-provider-cost-usd USD] [--max-runway-credits CREDITS] \
+  [--accept-unknown-provider-cost]
 ```
 
-Live generation requires a passing smoke run ID and a matching human-reviewed copy under
-`outputs/reviews/`; the original run QA stays blank. Multi-shot generation stops after downloaded
+Live generation requires a passing talking smoke and a successful, human-reviewed independent
+motion smoke with matching keyframe hash; pass both immutable review copies under `outputs/reviews/`.
+The original run QA stays blank. Multi-shot generation stops after downloaded
 alternatives and writes `AWAITING_SELECTION`; it does not guess preferred shots.
 `--single-shot` permits the configured MVP fallback.
 
@@ -88,3 +132,7 @@ version; refuses gaps and overwrite.
 
 All error output is secret-redacted. No command prints provider credentials or authorization
 headers.
+
+Every live generation path requires its applicable explicit cost/credit cap before provider
+construction. Unknown cost fails closed unless `--accept-unknown-provider-cost` explicitly permits
+one call. Product-page/homepage live generation is outside the production-readiness remediation.

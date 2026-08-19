@@ -60,6 +60,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     except SystemExit as exc:
         return int(exc.code)
     try:
+        from .env import load_project_env
+
+        load_project_env(getattr(args, "project_root", Path.cwd()))
         if args.command == "validate":
             payload = validate_project(args.project_root)
             print(json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True))

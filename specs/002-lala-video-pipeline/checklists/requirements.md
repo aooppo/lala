@@ -32,5 +32,7 @@
 ## Notes
 
 - Validation iteration 1 passed all checklist items on 2026-08-18.
+- Validation iteration 2 passed after production-readiness requirements FR-039–FR-050 and
+  SC-017–SC-026 were reconciled with current official provider evidence on 2026-08-19.
 - Required production inputs are explicit dependencies rather than specification ambiguities.
 - No authoritative script content, voice media, or keyframe was invented to satisfy the spec.

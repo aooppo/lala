@@ -55,15 +55,21 @@ Describes the approved voice path without credentials.
 | `canonical_source_manifest` | path/null | Hash-pinned manifest under `assets/voice/metadata/` |
 | `canonical_sources` | validated record list | PCM WAVs under `assets/voice/source/`; clone inputs only |
 | `script_hash` | hex/null | Approved audio must map to exact script when Mode A |
-| `language`, `accent` | string/null | Approved profile metadata; language may be sent in Mode B |
+| `language`, `locale`, `gender`, `engine`, `type`, `created_at` | string/null | API or human facts only; never guessed |
+| `accent` | string/null | Human-provided metadata only |
 | `speed`, `style`, `stability`, `similarity` | scalar/null | Approved profile metadata; bounded speed may be sent in Mode B |
 | `output_format` | string | WAV for approved/generated archival audio |
 | `sample_rate` | integer/null | Verified from media when available |
-| `approval_status` | enum | `pending` or `approved` |
+| `approval_status` | enum | `pending`, `verified`, `approved_for_smoke`, `production_approved`, or `rejected` |
+| `owner_supplied_voice_id` | boolean | Records provenance, not quality approval |
+| `verification_run_id`, `verification_time` | string/timestamp/null | Required before `approved_for_smoke` |
+| `voice_name`, `profile_version`, `approval_scope`, `owner_reference` | string/null | Safe versioned provenance; no API key |
 
 Canonical voice sources may be present while `mode` and `approval_status` remain `pending`. They do
 not populate `script_audio`, do not map to product-page/tooltip/homepage copy, and do not satisfy
-the approved narration or reusable-profile gate.
+the approved narration or reusable-profile gate. `approved_for_smoke` requires the exact expected
+voice ID/name plus a successful read-only private/Starfish membership check and verification
+evidence. Only human listening and talking QA may advance to `production_approved`.
 
 ## VideoPreset
 
@@ -143,6 +149,7 @@ a generated WAV remains derived and is never promoted implicitly.
 | `attempts` | integer | Submission attempts before first task ID plus read/download retries |
 | `output_urls` | redacted URI list | Ephemeral; never contains credentials |
 | `estimated_cost` | CostComponent/null | From documented formula or response |
+| `actual_cost` | CostComponent/null | Terminal provider fact; never replaced by an estimate |
 | `error_code`, `error_message` | string/null | Sanitized |
 | timestamps | timestamp/null | Ordered lifecycle evidence |
 

@@ -81,12 +81,12 @@ per-script source references in `configs/script-manifest.yaml`. The eight WAVs a
 LaLa voice-cloning source material only. They are not product-page, tooltip, or homepage narration
 and do not satisfy the approved voice gate.
 
-The remaining required external input is one of:
-
-- a real approved HeyGen Starfish/private Lady LaLa `voice_id` and profile metadata in
-  `configs/voice-profile.yaml`; or
-- approved per-script Lady LaLa narration WAVs under `assets/voice/approved/`, with exact script
-  hash mappings in `script_audio`.
+The owner-selected HeyGen voice ID `7a738e1ced454de6b92d2c76a6ccb8c0` is configured, but the
+versioned profile remains `pending` until a read-only API verification proves that the current
+account can read `Lady LaLa v1` as a private Starfish-compatible voice. A successful verification
+may advance it only to `approved_for_smoke`; `production_approved` still requires human preview
+and talking-QA decisions. Approved per-script narration WAVs remain an alternative and take
+precedence when their exact script hashes match.
 
 Configuration remains credential-free:
 
@@ -100,8 +100,9 @@ Configuration remains credential-free:
 - `configs/providers.yaml`: dated official capabilities, pricing sources, and safety maxima only.
 
 Approved anchors, keyframes, voice files, and scripts are immutable. Derived audio/media goes only
-under categorized `outputs/` paths. Until the real profile or narration WAVs arrive, validation
-and preview stop before run allocation/provider construction with the sole blocker:
+under categorized `outputs/` paths. Until the configured voice is read-only verified as
+`approved_for_smoke` (or approved per-script WAVs are supplied), talking validation and previews
+stop before run allocation/provider construction with the sole blocker:
 
 ```text
 BLOCKED_EXTERNAL: Goal 2 still requires a real approved HeyGen Starfish/private Lady LaLa voice profile or approved per-script Lady LaLa narration WAVs.
@@ -109,11 +110,20 @@ BLOCKED_EXTERNAL: Goal 2 still requires a real approved HeyGen Starfish/private 
 
 ### Validate and preview without provider calls
 
-After supplying and approving the remaining voice profile/audio:
+The independent motion smoke preview does not require a voice, narration, or talking review:
+
+```bash
+uv run python -m lala_workflow video motion-smoke-test \
+  --keyframe pilot_home_context --model gen4_turbo --duration 5 \
+  --ratio 1280:720 --variations 1 --max-runway-credits 25 --dry-run
+```
+
+After verifying and approving the remaining voice profile/audio:
 
 ```bash
 uv run python -m lala_workflow video validate
-uv run python -m lala_workflow video talking-smoke-test --preset tooltip --dry-run
+uv run python -m lala_workflow video talking-smoke-test \
+  --preset tooltip --variations 1 --max-provider-cost-usd 1.00 --dry-run
 uv run python -m lala_workflow video generate --preset product_page --dry-run
 uv run python -m lala_workflow video generate --preset tooltip --dry-run
 uv run python -m lala_workflow video generate --preset homepage --dry-run
@@ -151,15 +161,34 @@ promotion verify that the copy matches the run/candidate provenance and record i
 
 ### Staged live workflow
 
-Never run live commands without owner authorization, provider budget, and the real approved input
-package. The first provider test is restricted to one 8–12-second talking result:
+The project-root `.env` is loaded with `override=False`; an existing process value always wins.
+Tests and CI disable developer `.env` loading. Inspecting environment status exposes only
+`configured`/`missing` and value length, never values. A lowercase `voice_id` is not consumed;
+explicitly migrate it with `video voice init-env`.
+
+Verify the existing voice read-only before any speech/video call:
+
+```bash
+uv run python -m lala_workflow video voice verify \
+  --voice-id-env HEYGEN_VOICE_ID
+```
+
+The result is `VERIFIED_FOR_SMOKE`, never automatic production approval. Optional preview audio
+goes only under `outputs/audio/voice_preview/<run_id>/` and remains unreviewed.
+
+Never run live commands without owner authorization, explicit provider budgets, and approved
+inputs. The independent first Runway stage requires exact `VIDEO_MOTION_LIVE_SMOKE_TEST=true`,
+one five-second `gen4_turbo` result, and at most 25 credits. It emits the MP4, FFprobe metadata,
+first/middle/last frames, contact sheet, task ID, estimated/actual credits, hashes, and blank QA.
+
+The first talking test is separately restricted to one 8–12-second result:
 
 ```bash
 export VIDEO_ALLOW_LIVE_CALLS=true
 export VIDEO_LIVE_SMOKE_TEST=true
 export HEYGEN_API_KEY='set-locally-do-not-commit'
 uv run python -m lala_workflow video talking-smoke-test \
-  --preset tooltip --live
+  --preset tooltip --variations 1 --max-provider-cost-usd 1.00 --live
 ```
 
 For the approved Runway-custom-avatar talking path, select `--provider runway_talking`, configure
@@ -167,9 +196,10 @@ the exact approved digest mapping, and provide `RUNWAYML_API_SECRET` instead. A 
 immediately and is never resubmitted automatically. Polling/download retries, concurrency, total
 timeout, and variation counts remain bounded.
 
-Copy the smoke run’s blank QA sheet and review only the copy. Full pilot generation requires all
-smoke QA pass fields, MTL readiness, reviewer, and timezone-aware review time, plus both immutable
-inputs:
+Copy both smoke runs’ blank QA sheets and review only the copies. Full pilot generation requires
+all talking/motion QA pass fields, MTL readiness, reviewer, and timezone-aware review time, plus
+both immutable review copies. The motion copy is supplied with
+`--motion-smoke-run-id` and `--motion-smoke-review-file`.
 
 ```bash
 mkdir -p outputs/reviews
@@ -188,6 +218,7 @@ uv run python -m lala_workflow video talking-smoke-test \
   --variations 3 \
   --smoke-run-id LALA-VIDEO-SMOKE-RUN \
   --smoke-review-file outputs/reviews/LALA-VIDEO-SMOKE-RUN-review.csv \
+  --max-provider-cost-usd 1.00 \
   --live
 ```
 
@@ -205,6 +236,10 @@ uv run python -m lala_workflow video generate \
   --preset product_page \
   --smoke-run-id LALA-VIDEO-SMOKE-RUN \
   --smoke-review-file outputs/reviews/LALA-VIDEO-SMOKE-RUN-review.csv \
+  --motion-smoke-run-id LALA-VIDEO-MOTION-SMOKE-RUN \
+  --motion-smoke-review-file outputs/reviews/LALA-VIDEO-MOTION-SMOKE-RUN-review.csv \
+  --max-provider-cost-usd 1.00 \
+  --max-runway-credits 100 \
   --live
 ```
 
@@ -238,7 +273,22 @@ uv run python -m lala_workflow video report --run-id LALA-VIDEO-ASSEMBLY-RUN
 Assembly makes zero provider calls. It normalizes scale, letterboxing, frame rate, and codec;
 trims/reuses the selected talking performance; intercuts chosen B-roll; replaces/normalizes audio
 from the approved WAV; optionally crossfades the second edit; refuses overwrite; logs the exact
-argument-safe FFmpeg commands; and validates/hashes final MP4s.
+argument-safe FFmpeg commands; and validates/hashes final MP4s. Tooltip assembly resolves a real
+reward graphic. If no approved brand source is configured, it creates a deterministic local PNG
+under `outputs/graphics/`, overlays it in FFmpeg, marks it `DRAFT / NOT MTL APPROVED`, returns
+`REVIEW_READY_DRAFT_ASSETS`, and blocks promotion. AI image generation is never used for exact
+marketing text.
+
+An unapproved talking crop can be derived without changing the approved keyframe:
+
+```bash
+uv run python -m lala_workflow video keyframe derive-talking-crop \
+  --source pilot_home_context
+```
+
+The crop and provenance go under `outputs/keyframes/derived/`; no approval or manifest promotion
+is inferred. Product-page/homepage live generation requires an independently approved
+`talking_medium_closeup` role, while Tooltip smoke may use the original pilot hero.
 
 After human review, copy the assembly run’s blank `review.csv` to `outputs/reviews/`, then set
 `mtl_review_ready`, `reviewer`, and timezone-aware `reviewed_at` in the one matching row of that
@@ -295,8 +345,8 @@ identical. Model and dimension overrides are rejected unless listed in verified 
 
 ## Environment variables and secrets
 
-`.env.example` contains names only. This CLI reads the process environment and does not
-automatically load `.env` files.
+`.env.example` contains names and safe false/blank defaults only. The CLI loads only the parsed
+project-root `.env` with `override=False`; it never searches parent directories.
 
 | Variable | Purpose |
 |----------|---------|
@@ -305,7 +355,10 @@ automatically load `.env` files.
 | `RUNWAY_LIVE_SMOKE_TEST=true` | Restricts live execution to exactly one output |
 | `VIDEO_ALLOW_LIVE_CALLS=true` | Separate exact Goal 2 paid-call permission |
 | `VIDEO_LIVE_SMOKE_TEST=true` | Restricts the first video test to one short talking result |
+| `VIDEO_MOTION_LIVE_SMOKE_TEST=true` | Separately authorizes the first one-result Runway motion smoke |
+| `VIDEO_FULL_PILOT_LIVE=true` | Separately authorizes reviewed full pilot shot generation |
 | `HEYGEN_API_KEY` | HeyGen key; required only for selected live talking work |
+| `HEYGEN_VOICE_ID` | Canonical owner-selected voice ID; lowercase `voice_id` is rejected |
 
 Never commit or print real credentials. The CLI and run storage redact secret values, Bearer
 tokens, authorization fields, and data-URI payloads from metadata and errors.

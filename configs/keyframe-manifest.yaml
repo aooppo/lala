@@ -3,6 +3,9 @@ status: approved
 keyframe_set_version: owner-supplied-v1.0.0
 keyframes:
   pilot_home_context:
+    roles:
+      - pilot_home_context
+      - establishing_keyframe
     path: assets/approved_keyframes/lady-lala-home-context-v0.7.png
     sha256: ab53d9d0551bcf926a41072567493cf640815d99ff92503d9bc111ec3ce7b9ca
     provenance_type: owner_supplied_legacy_asset

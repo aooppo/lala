@@ -12,6 +12,7 @@ dependencies = [
   "Pillow>=10.4,<13",
   "PyYAML>=6.0.2,<7",
   "httpx>=0.28,<1",
+  "python-dotenv>=1.1,<2",
   "runwayml==5.15.0",
 ]
 

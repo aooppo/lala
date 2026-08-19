@@ -36,6 +36,14 @@ def promote_video(
         raise PromotionError("video promotion requires an exact thirteen-artifact run")
     request = _read_json(run_dir / "request.json")
     results = _read_json(run_dir / "provider-results.json")
+    if (
+        results.get("status") == "REVIEW_READY_DRAFT_ASSETS"
+        or results.get("contains_draft_brand_assets") is True
+        or request.get("contains_draft_brand_assets") is True
+    ):
+        raise PromotionError(
+            "candidates containing draft brand assets cannot be promoted"
+        )
     if request.get("action") != "assemble" or results.get("status") != "REVIEW_READY":
         raise PromotionError("only review-ready final assembly candidates can be promoted")
     matches = [
@@ -112,6 +120,7 @@ def promote_video(
         "audio": audio,
         "keyframe": keyframe,
         "selected_shots": (shot_plan.get("selection") or {}).get("selections", {}),
+        "brand_assets": shot_plan.get("graphics", []),
         "providers": providers,
         "reviewer": review["reviewer"],
         "reviewed_at": review["reviewed_at"],

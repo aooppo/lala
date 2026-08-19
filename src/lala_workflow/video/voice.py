@@ -6,6 +6,7 @@ from typing import Any, Mapping
 
 from ..audio.validation import AudioValidationError, inspect_wav, validate_approved_wav
 from ..hashing import assert_within_directory, sha256_file
+from .config import USABLE_VOICE_APPROVALS
 from .domain import ApprovedAudio, ScriptRecord, VideoProjectConfig, VoiceRequest
 
 
@@ -23,8 +24,10 @@ def resolve_approved_audio(
     override: Path | None = None,
 ) -> ApprovedAudio:
     profile = config.voice_profile
-    if profile.approval_status != "approved":
-        raise VoiceResolutionError("Lady LaLa voice approval_status must be approved")
+    if profile.approval_status not in USABLE_VOICE_APPROVALS:
+        raise VoiceResolutionError(
+            "Lady LaLa voice approval_status must be approved_for_smoke or production_approved"
+        )
     raw = profile.script_audio.get(script.script_id)
     if not isinstance(raw, Mapping):
         raise VoiceResolutionError(f"approved WAV mapping is missing for {script.script_id}")
@@ -72,11 +75,12 @@ def resolve_or_synthesize_audio(
     *,
     run_id: str,
     provider: Any | None,
+    speed_override: float | None = None,
 ) -> ApprovedAudio:
     if script.script_id in config.voice_profile.script_audio:
         return resolve_approved_audio(config, script)
     profile = config.voice_profile
-    if profile.mode != "cloned_voice" or profile.approval_status != "approved":
+    if profile.mode != "cloned_voice" or profile.approval_status not in USABLE_VOICE_APPROVALS:
         raise VoiceResolutionError("an approved audio or cloned-voice mode is required")
     if provider is None:
         raise VoiceResolutionError("configured cloned voice requires a VoiceProvider")
@@ -94,7 +98,7 @@ def resolve_or_synthesize_audio(
         model=profile.model,
         voice_id=profile.voice_id,
         language=profile.language,
-        speed=profile.speed,
+        speed=profile.speed if speed_override is None else speed_override,
         output_path=output,
         output_format=profile.output_format,
         sample_rate=profile.sample_rate,

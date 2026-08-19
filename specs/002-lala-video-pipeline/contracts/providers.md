@@ -56,7 +56,10 @@ ID, script hash, voice ID, reported duration, validated WAV hash, and a query-re
 The adapter never writes into an approved-source directory and never changes approval status.
 
 Authentication uses the same local `HEYGEN_API_KEY` in `X-Api-Key`; it is redacted from failures
-and never serialized. Voice pricing remains null until an official plan-specific amount is known.
+and never serialized. Current self-serve Starfish pricing is USD 0.000667 per output second and is
+recorded as an estimate until provider/billing evidence supplies an actual. The current speech
+operation does not document `Idempotency-Key`; synthesis is therefore submitted at most once per
+run attempt and an ambiguous response fails closed without automatic replay.
 
 ## Runway talking translation
 

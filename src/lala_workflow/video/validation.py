@@ -147,6 +147,7 @@ def _validate_goal1_promotion_keyframe(
         source_output_id=values["source_output_id"],
         reviewer=values["reviewer"],
         approved_at=approved_at.isoformat(),
+        roles=_roles(raw),
     )
 
 
@@ -254,4 +255,15 @@ def _validate_owner_supplied_legacy_keyframe(
         source_package_sha256=values["source_package_sha256"].lower(),
         source_path=values["source_path"],
         owner_approval_reference=values["owner_approval_reference"],
+        roles=_roles(raw),
     )
+
+
+def _roles(raw: Mapping[str, Any]) -> tuple[str, ...]:
+    values = raw.get("roles") or ()
+    if not isinstance(values, (list, tuple)):
+        raise SourceValidationError("keyframe roles must be a list")
+    roles = tuple(str(value).strip() for value in values)
+    if any(not value for value in roles) or len(set(roles)) != len(roles):
+        raise SourceValidationError("keyframe roles must be non-empty and unique")
+    return roles

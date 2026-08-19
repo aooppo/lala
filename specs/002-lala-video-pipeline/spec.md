@@ -1,13 +1,14 @@
 # Feature Specification: Reproducible Lady LaLa Video Pipeline
 
-**Feature Branch**: `main`
+**Feature Branch**: `fix/goal2-production-readiness`
 
 **Feature Directory**: `002-lala-video-pipeline`
 
 **Created**: 2026-08-18
 
-**Status**: Offline authoritative-input import complete; an approved reusable voice profile or
-approved per-script narration remains an external prerequisite
+**Status**: Production-readiness remediation in progress; the owner-supplied HeyGen voice ID is
+available for read-only verification and bounded smoke use, but remains subject to human audio and
+talking-shot approval
 
 **Input**: User description: "Build and complete a reproducible Lady LaLa video-generation
 pipeline using approved Goal 1 keyframes, the approved Lady LaLa voice, and exact MTL-provided
@@ -152,6 +153,74 @@ candidate, hashes, scripts, media inputs, providers, reviewer, and date.
    promoted, **Then** a new approved copy and provenance record are created while the candidate
    remains unchanged.
 
+---
+
+### User Story 6 - Verify the Owner-Supplied Voice Safely (Priority: P1)
+
+As a production operator, I can load project-local credentials without exposing them and verify
+that the exact owner-supplied Lady LaLa voice is readable and Starfish-compatible, so smoke work
+uses the intended voice without creating or replacing a clone.
+
+**Independent Test**: With a capturing fake API, verify the configured voice through read-only
+detail and filtered-list requests, record only safe metadata and a query-stripped preview URL, and
+prove a mismatched ID or name stops before profile advancement.
+
+**Acceptance Scenarios**:
+
+1. **Given** the exact owner-supplied voice ID and readable account access, **When** verification
+   runs, **Then** it returns `VERIFIED_FOR_SMOKE`, records supported safe metadata, and never marks
+   the voice production-approved.
+2. **Given** process environment and project-local environment values, **When** configuration
+   loads, **Then** process values win, missing files remain harmless, and no secret or environment
+   file location enters evidence.
+3. **Given** only the legacy lowercase voice variable, **When** validation runs, **Then** it gives a
+   precise migration instruction and does not silently use the ambiguous variable.
+
+---
+
+### User Story 7 - Prove One Motion Shot Independently (Priority: P2)
+
+As a production operator, I can preview or generate one five-second Runway motion candidate from
+one approved keyframe without HeyGen, narration, or talking QA, so motion capability and cost can
+be reviewed independently.
+
+**Independent Test**: Run the motion-smoke workflow with a simulated Runway provider and verify one
+request, one MP4, task/cost evidence, complete technical metadata, three extracted frames, a
+contact sheet, and one blank QA row without constructing any voice or talking provider.
+
+**Acceptance Scenarios**:
+
+1. **Given** an approved keyframe and dry-run mode, **When** motion smoke is previewed, **Then** it
+   plans one five-second `gen4_turbo` request capped at 25 credits and makes zero provider calls.
+2. **Given** exact live flags, credential, and a 25-credit-or-lower cap, **When** live motion smoke
+   runs, **Then** exactly one task is submitted and its terminal result is downloaded and validated.
+3. **Given** any missing motion flag, credential, or explicit credit cap, **When** live execution is
+   requested, **Then** it stops before provider construction.
+
+---
+
+### User Story 8 - Assemble a Minimal Tooltip with Real Local Graphics (Priority: P3)
+
+As an MTL reviewer, I can receive a deterministic tooltip candidate containing the selected Lady
+LaLa talking shot, exact audio, and a visible reward graphic, so the shortest useful Goal 2
+deliverable is reviewable without outsourcing ordinary editing.
+
+**Independent Test**: Assemble a tooltip fixture with a deterministic draft reward graphic and
+verify the graphic is actually composited, exact commands and asset hashes are recorded, the
+candidate status is `REVIEW_READY_DRAFT_ASSETS`, and promotion is refused until every used brand
+asset is approved.
+
+**Acceptance Scenarios**:
+
+1. **Given** approved brand assets, **When** tooltip assembly runs, **Then** every local graphic is
+   a hashed input to the recorded edit and the result becomes `REVIEW_READY`.
+2. **Given** missing approved brand assets, **When** tooltip assembly runs, **Then** deterministic
+   exact-copy draft assets are produced outside approved directories, visibly marked as drafts,
+   and the candidate remains reviewable but not promotable.
+3. **Given** reviewed motion and talking smoke prerequisites, **When** the minimal tooltip workflow
+   completes, **Then** it produces `lady-lala-tooltip-candidate-v001.mp4` with complete provenance
+   and blank human QA fields.
+
 ### Edge Cases
 
 - An approved input path escapes its configured approved-source directory or points to a derived
@@ -257,9 +326,9 @@ candidate, hashes, scripts, media inputs, providers, reviewer, and date.
   preset, candidate status, and a monotonically increasing version without overwriting an existing
   file.
 - **FR-030**: Every newly generated candidate MUST receive exactly one QA row covering run,
-  preset, candidate, visual identity, face, hair, wardrobe, jewelry, lip sync, mouth and teeth,
-  eyes, audio, synchronization, background, motion, script match, technical export, MTL readiness,
-  reviewer, review time, and notes.
+  preset, candidate, visual identity, face, age, hair, body proportions, wardrobe, jewelry, lip
+  sync, mouth, teeth, eyes, background, motion, audio identity, pronunciation, script match,
+  audio/video synchronization, technical export, MTL readiness, reviewer, review time, and notes.
 - **FR-031**: All subjective QA, readiness, reviewer, review-time, and note fields MUST start blank;
   the workflow MUST NOT automatically approve identity, voice, script, lip sync, or MTL readiness.
 - **FR-032**: Promotion MUST require an explicitly ready candidate with reviewer and review time,
@@ -287,6 +356,51 @@ candidate, hashes, scripts, media inputs, providers, reviewer, and date.
   without byte changes, verify package/member digests before copy and destination digests after
   copy, preserve existing approved anchors and run evidence, and record the package provenance in
   repository manifests.
+- **FR-039**: Runtime configuration MUST safely load only the project-root local environment file
+  when present, preserve existing process-environment precedence, remain harmless when absent,
+  avoid loading a developer environment during automated tests, and never log or serialize secret
+  values or the environment-file path.
+- **FR-040**: A read-only voice-verification workflow MUST validate the exact owner-supplied ID,
+  expected name, private type, and Starfish compatibility; record only safe available metadata and
+  a query-stripped preview URL; distinguish `verified`, `approved_for_smoke`, and
+  `production_approved`; and never create, modify, replace, or delete a voice.
+- **FR-041**: HeyGen talking mutations MUST use the documented multipart asset contract, safe
+  content-aware idempotency keys, one upload per unique run/content/type/endpoint, capability-aware
+  optional fields, current failure fields, bounded `409 request_in_progress` handling, and
+  fail-closed ambiguous-submission evidence without a replacement paid submission.
+- **FR-042**: Motion smoke MUST be independently previewable and executable from one approved
+  keyframe as one five-second `gen4_turbo` output with a maximum of 25 Runway credits, concurrency
+  one, no talking/voice dependency, complete task/cost/media evidence, and one blank QA row.
+- **FR-043**: Every live voice, talking, motion, and complete-pilot action MUST receive an explicit
+  applicable provider-cost or credit ceiling before provider construction; exceedance MUST stop,
+  unknown cost MUST stop unless accepted for one call explicitly, and estimates and actuals MUST
+  remain distinct with unknown values represented as null.
+- **FR-044**: Technical video validation MUST record container, duration, dimensions, video codec,
+  pixel format, average frame rate, audio presence and codec, sample rate, channel count, and bit
+  rate; validate expected duration/resolution/audio rules; and generate non-overwriting first,
+  middle, last frames and a contact sheet for smoke outputs.
+- **FR-045**: Every configured local graphic, reward visual, closing card, or end card MUST resolve
+  to a hashed approved brand asset or a deterministic exact-copy draft artifact that is visibly
+  marked unapproved and actually composited by the recorded local edit. Any draft dependency MUST
+  make promotion fail closed.
+- **FR-046**: Keyframe manifests MUST support establishing, talking-medium-closeup, and
+  product-present roles. A crop command MAY create a deterministic talking-crop candidate with
+  source/output hashes and crop coordinates, but MUST never modify or automatically approve the
+  source or derived output.
+- **FR-047**: Minimal tooltip end-to-end generation MUST require verified voice state, human-reviewed
+  motion and talking smoke prerequisites, one talking and at most one motion alternative, one
+  deterministic final edit, exact tooltip audio, a real reward graphic, complete provenance, and
+  blank final QA; product-page and homepage live generation remain outside this remediation run.
+- **FR-048**: Continuous integration MUST install the supported Python environment and FFmpeg,
+  compile source and tests, run all offline tests with real network connections blocked, read no
+  developer environment file, use no real credentials, and make zero paid calls.
+- **FR-049**: Optional voice-preview download MUST remain a distinct explicit read-only command,
+  write only to a derived voice-preview run directory, preserve a query-stripped source URL, and
+  record content hash, duration, sample rate, channels, and voice ID without advancing approval.
+- **FR-050**: Synthesized tooltip speech MUST preserve the exact script bytes/text and may try only
+  speeds 0.9, 1.0, and 1.1, with at most two additional paid calibration attempts after the first;
+  every attempt requires a remaining explicit budget and human selection, and no attempt may
+  rewrite the script to reach the eight-to-twelve-second window.
 
 ### Key Entities
 
@@ -359,6 +473,31 @@ candidate, hashes, scripts, media inputs, providers, reviewer, and date.
   production validation reports only the absence of a real approved HeyGen Starfish/private Lady
   LaLa voice profile or approved per-script narration WAVs; it creates no run and makes zero
   provider calls.
+- **SC-017**: All environment-loading tests pass for absent, present, process-precedence, test-
+  isolation, and secret-redaction cases with zero leaked credential values.
+- **SC-018**: Voice verification either returns `VERIFIED_FOR_SMOKE` for the exact expected voice
+  or stops on any ID/name/compatibility mismatch, while never producing a voice mutation request.
+- **SC-019**: Motion smoke preview reports exactly one five-second request and at most 25 estimated
+  credits with zero HeyGen/voice dependencies; simulated live execution produces exactly one
+  validated candidate and one blank QA row.
+- **SC-020**: One hundred percent of live generation entry points stop before provider construction
+  when an applicable explicit budget is missing, exceeded, or unknown without one-call acceptance.
+- **SC-021**: One hundred percent of smoke videos have full technical stream/container evidence,
+  three extracted verification frames, and a contact sheet whose hashes are recorded.
+- **SC-022**: Every local graphic shot contributes a concrete hashed edit input; candidates using
+  a draft graphic are labeled `REVIEW_READY_DRAFT_ASSETS` and have zero successful promotions.
+- **SC-023**: The complete offline suite, compilation, all required Goal 1 and Goal 2 previews, CI
+  configuration audit, approved-source hash comparison, and secret scan pass with zero Goal 2 paid
+  calls.
+- **SC-024**: When external flags, provider funds, and human approvals are absent, final reporting
+  says `OFFLINE_COMPLETE` and `LIVE_NOT_ATTEMPTED` rather than production-ready; a higher live
+  status is reported only from task IDs, downloaded outputs, and verified hashes.
+- **SC-025**: A simulated preview download produces one validated derived audio artifact and safe
+  metadata without a voice mutation, while a real preview download is never performed by the
+  verification command itself.
+- **SC-026**: Speech-duration calibration performs no more than three total synthesis attempts,
+  never changes the tooltip script hash, checks budget before every attempt, and records every
+  attempted speed and result for human choice.
 
 ## Assumptions
 
@@ -366,8 +505,10 @@ candidate, hashes, scripts, media inputs, providers, reviewer, and date.
   keyframe candidate, approved all eight canonical voice-cloning source WAVs, and identified three
   authoritative MTL scripts. No genuine Goal 1 promoted keyframe exists in the repository, so the
   package keyframe uses the distinct `owner_supplied_legacy_asset` provenance path.
-- The canonical voice-cloning WAVs are not the three scripts' final narration. A real approved
-  HeyGen Starfish/private Lady LaLa voice profile or approved per-script WAVs remains required.
+- The canonical voice-cloning WAVs are not the three scripts' final narration. The owner supplied
+  HeyGen private voice ID `7a738e1ced454de6b92d2c76a6ccb8c0` (`Lady LaLa v1`) for read-only
+  verification and smoke use; final production approval still requires human preview and talking
+  QA. Approved per-script WAVs continue to take precedence whenever present.
 - Human reviewers determine whether the live talking-shot smoke result passes before any complete
   pilot generation and select preferred shot alternatives before final assembly.
 - Exact script matching is byte-for-byte, including punctuation, capitalization, line endings,
@@ -379,7 +520,7 @@ candidate, hashes, scripts, media inputs, providers, reviewer, and date.
 - Network access is required only for official provider research and explicitly authorized live
   calls; previews, local assembly tests, and all automated verification remain offline-capable.
 - Missing provider pricing is represented as unknown and does not block preview or simulated
-  verification.
+  verification, but blocks live work unless the operator explicitly accepts one unknown-cost call.
 - The repository remains responsible only for static-image and video media production workflows;
   storefront integration, automated biometric scoring, and automatic MTL approval remain outside
   scope.

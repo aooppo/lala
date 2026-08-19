@@ -1,0 +1,52 @@
+version: "1.0"
+project: lady-lala
+draft_notice: DRAFT / NOT MTL APPROVED
+assets:
+  decorolala_logo:
+    path: null
+    sha256: null
+    version: null
+    approval_status: missing
+    reviewer: null
+    reviewed_at: null
+    source_reference: null
+  lala_like_heart:
+    path: null
+    sha256: null
+    version: null
+    approval_status: missing
+    reviewer: null
+    reviewed_at: null
+    source_reference: null
+  five_lala_likes:
+    path: null
+    sha256: null
+    version: null
+    approval_status: missing
+    reviewer: null
+    reviewed_at: null
+    source_reference: null
+  five_percent_off_coupon:
+    path: null
+    sha256: null
+    version: null
+    approval_status: missing
+    reviewer: null
+    reviewed_at: null
+    source_reference: null
+  club_lala:
+    path: null
+    sha256: null
+    version: null
+    approval_status: missing
+    reviewer: null
+    reviewed_at: null
+    source_reference: null
+  end_card:
+    path: null
+    sha256: null
+    version: null
+    approval_status: missing
+    reviewer: null
+    reviewed_at: null
+    source_reference: null

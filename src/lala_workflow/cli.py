@@ -13,6 +13,8 @@ from .providers.base import ProviderTaskError, WorkflowError
 from .redaction import redact_text
 from .reporting import promote_keyframe, read_run_summary
 from .runner import LiveCallBlocked, RunOptions, run_generation, validate_project
+from .video import cli as video_cli
+from .video.validation import ExternalInputBlocked
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -47,6 +49,7 @@ def build_parser() -> argparse.ArgumentParser:
     promote.add_argument("--project-root", type=Path, default=Path.cwd())
     promote.add_argument("--run-id", required=True)
     promote.add_argument("--output-id", required=True)
+    video_cli.configure_parser(subparsers)
     return parser
 
 
@@ -105,8 +108,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             record = promote_keyframe(args.project_root, args.run_id, args.output_id)
             print(json.dumps(record, indent=2, ensure_ascii=False, sort_keys=True))
             return 0
+        if args.command == "video":
+            exit_code, payload = video_cli.handle(args)
+            if isinstance(payload, str):
+                print(payload, end="" if payload.endswith("\n") else "\n")
+            else:
+                print(json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True))
+            return exit_code
         raise ValueError(f"unknown command: {args.command}")
-    except LiveCallBlocked as exc:
+    except (LiveCallBlocked, ExternalInputBlocked) as exc:
         print(f"BLOCKED_EXTERNAL: {redact_text(str(exc))}", file=sys.stderr)
         return 4
     except ProviderTaskError as exc:

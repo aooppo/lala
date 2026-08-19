@@ -10,7 +10,8 @@ from .domain import to_primitive
 
 REDACTED = "[REDACTED]"
 SENSITIVE_KEY_RE = re.compile(
-    r"(?:authorization|api[_-]?key|api[_-]?secret|secret|access[_-]?token|password)",
+    r"(?:authorization|x[_-]?api[_-]?key|api[_-]?key|api[_-]?secret|secret|"
+    r"credential|access[_-]?token|refresh[_-]?token|password|cookie|signature)",
     re.IGNORECASE,
 )
 BEARER_RE = re.compile(r"(?i)(Bearer\s+)[A-Za-z0-9._~+/=-]+")

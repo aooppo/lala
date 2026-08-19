@@ -1,12 +1,14 @@
-# Lady LaLa Reproducible Static Image Workflow
+# Lady LaLa Reproducible Media Workflow
 
-This project validates approved Lady LaLa anchor images, builds controlled static-image requests,
-generates bounded Runway batches when explicitly authorized, records complete reproducibility
-metadata, creates human QA sheets, and promotes reviewed images to approved video keyframes.
+This project implements two staged, reproducible workflows. Goal 1 validates approved Lady LaLa
+anchors, generates bounded static candidates, and promotes reviewed images to approved video
+keyframes. Goal 2 consumes those approved keyframes with an approved Lady LaLa voice and exact MTL
+scripts to produce talking-shot alternatives, Runway motion/B-roll, deterministic FFmpeg edits,
+blank human QA sheets, and review-gated approved video copies.
 
-The current scope ends at approved static keyframes. It does not implement talking video, voice
-cloning, lip sync, final video editing, ComfyUI, Coze, Shopify, face-recognition approval, or
-automatic MTL approval.
+The workflow never rewrites MTL copy, auto-approves identity/voice/lip sync, or deploys to Shopify.
+ComfyUI migration, Coze orchestration, unrelated website work, automatic creative approval, and
+automatic MTL approval remain out of scope.
 
 ## Requirements and setup
 
@@ -31,7 +33,234 @@ python -m pip install -e '.[dev]'
 python -m lala_workflow validate
 ```
 
-The production dependency is pinned to the verified official Python SDK `runwayml==5.14.0`.
+The production dependency is pinned to the verified official Python SDK `runwayml==5.15.0`.
+
+## Goal 2 video pipeline
+
+Goal 2 is provider-neutral by responsibility:
+
+```text
+Approved keyframe + exact MTL script + approved voice/audio
+    -> talking/lip-sync alternatives
+    -> optional Runway motion/B-roll
+    -> human shot selection
+    -> deterministic FFmpeg assembly and exact audio replacement
+    -> blank candidate QA
+    -> explicit MTL review and copy-only promotion
+```
+
+HeyGen v3 image-plus-audio is the default talking adapter because it accepts a local approved
+keyframe and approved audio directly. Runway `gwm1_avatars` is available only when configuration
+maps the exact keyframe SHA-256 to a previously human-approved custom avatar UUID; the workflow
+never creates that avatar implicitly. Runway image-to-video (`gen4_turbo`, with configurable
+`gen4.5`) is the motion/B-roll adapter. Ordinary edits stay local in FFmpeg.
+
+### Required authoritative inputs
+
+The owner-supplied `lala-goal2-authoritative-inputs-v1.0.0.zip` has been imported without changing
+member bytes. The repository now contains:
+
+```text
+assets/approved_keyframes/lady-lala-home-context-v0.7.png
+assets/approved_keyframes/lady-lala-home-context-v0.7.provenance.json
+assets/voice/source/lady-lala-canonical-clip-00-v1.0.wav ... clip-07-v1.0.wav
+assets/voice/metadata/canonical-source-manifest-v1.0.0.json
+assets/scripts/product-page.txt
+assets/scripts/tooltip.txt
+assets/scripts/homepage.txt
+```
+
+No genuine Goal 1 promoted keyframe exists locally. The imported pilot keyframe therefore uses the
+separate audited `owner_supplied_legacy_asset` branch with the package name/hash, package-relative
+source path, keyframe hash, and owner-approval reference. It has no invented Goal 1 run/output ID,
+provider/model/prompt claim, reviewer, or approval timestamp. Ordinary generated keyframes still
+require the complete Goal 1 promotion schema.
+
+The three scripts are exact-byte MTL Appendix A source copies with version `1.0.0`, SHA-256, and
+per-script source references in `configs/script-manifest.yaml`. The eight WAVs are canonical Lady
+LaLa voice-cloning source material only. They are not product-page, tooltip, or homepage narration
+and do not satisfy the approved voice gate.
+
+The remaining required external input is one of:
+
+- a real approved HeyGen Starfish/private Lady LaLa `voice_id` and profile metadata in
+  `configs/voice-profile.yaml`; or
+- approved per-script Lady LaLa narration WAVs under `assets/voice/approved/`, with exact script
+  hash mappings in `script_audio`.
+
+Configuration remains credential-free:
+
+- `configs/keyframe-manifest.yaml`: approved path/hash and branch-specific provenance. Genuine Goal
+  1 promotions use run/output/reviewer/time; the current legacy asset uses package audit fields.
+- `configs/script-manifest.yaml`: MTL source, immutable policy, version, exact path, and SHA-256 for
+  each script.
+- `configs/voice-profile.yaml`: either `approved_audio` with one approved WAV/hash/script-hash
+  mapping per script, or an approved `cloned_voice` provider/model/voice ID.
+- `configs/video-presets.yaml`: bounded shot composition and provider/model selection.
+- `configs/providers.yaml`: dated official capabilities, pricing sources, and safety maxima only.
+
+Approved anchors, keyframes, voice files, and scripts are immutable. Derived audio/media goes only
+under categorized `outputs/` paths. Until the real profile or narration WAVs arrive, validation
+and preview stop before run allocation/provider construction with the sole blocker:
+
+```text
+BLOCKED_EXTERNAL: Goal 2 still requires a real approved HeyGen Starfish/private Lady LaLa voice profile or approved per-script Lady LaLa narration WAVs.
+```
+
+### Validate and preview without provider calls
+
+After supplying and approving the remaining voice profile/audio:
+
+```bash
+uv run python -m lala_workflow video validate
+uv run python -m lala_workflow video talking-smoke-test --preset tooltip --dry-run
+uv run python -m lala_workflow video generate --preset product_page --dry-run
+uv run python -m lala_workflow video generate --preset tooltip --dry-run
+uv run python -m lala_workflow video generate --preset homepage --dry-run
+```
+
+Preview validates anchor/keyframe/script/audio/prompt hashes, resolves the shot plan and provider
+capabilities, calculates call counts, estimates only supportable costs, and writes request evidence.
+It never constructs a provider client. Defaults generate alternatives at shot level: up to three
+talking takes, three motion takes per applicable shot, and two local final edits. Product-page and
+homepage plans use one full-script talking performance and reuse its opening/closing deterministically
+around selected B-roll, so the approved audio and script are not duplicated.
+
+An accepted video run contains exactly:
+
+```text
+runs/<run_id>/
+├── request.json
+├── resolved-config.yaml
+├── script.txt
+├── script-hash.json
+├── audio-hash.json
+├── keyframe-hash.json
+├── shot-plan.json
+├── task-events.jsonl
+├── provider-results.json
+├── edit-commands.txt
+├── review.csv
+├── cost.json
+└── summary.md
+```
+
+Every Goal 2 run artifact is append-only. The generated `review.csv` stays blank evidence; copy it
+to `outputs/reviews/<run_id>-review.csv` before entering subjective decisions. Smoke approval and
+promotion verify that the copy matches the run/candidate provenance and record its SHA-256.
+
+### Staged live workflow
+
+Never run live commands without owner authorization, provider budget, and the real approved input
+package. The first provider test is restricted to one 8–12-second talking result:
+
+```bash
+export VIDEO_ALLOW_LIVE_CALLS=true
+export VIDEO_LIVE_SMOKE_TEST=true
+export HEYGEN_API_KEY='set-locally-do-not-commit'
+uv run python -m lala_workflow video talking-smoke-test \
+  --preset tooltip --live
+```
+
+For the approved Runway-custom-avatar talking path, select `--provider runway_talking`, configure
+the exact approved digest mapping, and provide `RUNWAYML_API_SECRET` instead. A task ID is persisted
+immediately and is never resubmitted automatically. Polling/download retries, concurrency, total
+timeout, and variation counts remain bounded.
+
+Copy the smoke run’s blank QA sheet and review only the copy. Full pilot generation requires all
+smoke QA pass fields, MTL readiness, reviewer, and timezone-aware review time, plus both immutable
+inputs:
+
+```bash
+mkdir -p outputs/reviews
+cp runs/LALA-VIDEO-SMOKE-RUN/review.csv \
+  outputs/reviews/LALA-VIDEO-SMOKE-RUN-review.csv
+# Fill only the copied CSV with a CSV-safe editor.
+```
+
+After that one result passes review, the talking-only validation can be expanded to three
+sequential alternatives without weakening the first-live gate:
+
+```bash
+unset VIDEO_LIVE_SMOKE_TEST
+uv run python -m lala_workflow video talking-smoke-test \
+  --preset tooltip \
+  --variations 3 \
+  --smoke-run-id LALA-VIDEO-SMOKE-RUN \
+  --smoke-review-file outputs/reviews/LALA-VIDEO-SMOKE-RUN-review.csv \
+  --live
+```
+
+Mode B uses the same `HEYGEN_API_KEY` only when `configs/voice-profile.yaml` identifies an
+explicitly approved `heygen_voice` / `starfish` private voice ID. Exact script bytes are submitted
+to HeyGen speech generation, and the downloaded audio is converted to a derived PCM WAV with its
+request ID and script hash recorded. An approved per-script WAV remains preferred whenever one is
+configured.
+
+```bash
+export VIDEO_ALLOW_LIVE_CALLS=true
+export HEYGEN_API_KEY='set-locally-do-not-commit'
+export RUNWAYML_API_SECRET='set-locally-do-not-commit'
+uv run python -m lala_workflow video generate \
+  --preset product_page \
+  --smoke-run-id LALA-VIDEO-SMOKE-RUN \
+  --smoke-review-file outputs/reviews/LALA-VIDEO-SMOKE-RUN-review.csv \
+  --live
+```
+
+Run the same command for `tooltip` and `homepage`. Multi-shot generation stops at
+`AWAITING_SELECTION`; it never guesses preferred takes. Remove credentials/permission from the
+shell after the authorized stage.
+
+### Select, assemble, report, and promote
+
+Create a human selection YAML outside the run record:
+
+```yaml
+source_run_id: LALA-VIDEO-...
+reviewer: MTL reviewer name
+selected_at: "2026-08-19T13:00:00+08:00"
+selections:
+  talking_performance: product_page-talking_performance-v001
+  product_interaction: product_page-product_interaction-v001
+  reward_visual: product_page-reward_visual-v001
+```
+
+Use artifact IDs from the source run’s `provider-results.json`; required shot IDs come from
+`shot-plan.json`.
+
+```bash
+uv run python -m lala_workflow video assemble \
+  --run-id LALA-VIDEO-SOURCE-RUN --selection-file selection.yaml --final-edits 2
+uv run python -m lala_workflow video report --run-id LALA-VIDEO-ASSEMBLY-RUN
+```
+
+Assembly makes zero provider calls. It normalizes scale, letterboxing, frame rate, and codec;
+trims/reuses the selected talking performance; intercuts chosen B-roll; replaces/normalizes audio
+from the approved WAV; optionally crossfades the second edit; refuses overwrite; logs the exact
+argument-safe FFmpeg commands; and validates/hashes final MP4s.
+
+After human review, copy the assembly run’s blank `review.csv` to `outputs/reviews/`, then set
+`mtl_review_ready`, `reviewer`, and timezone-aware `reviewed_at` in the one matching row of that
+copy. Promote with the reviewed copy as an explicit immutable input:
+
+```bash
+uv run python -m lala_workflow video promote \
+  --run-id LALA-VIDEO-ASSEMBLY-RUN \
+  --candidate lady-lala-product-page-candidate-v001.mp4 \
+  --review-file outputs/reviews/LALA-VIDEO-ASSEMBLY-RUN-review.csv
+```
+
+Promotion copies to `outputs/approved_videos/lady-lala-<preset>-approved-vN.mp4`, refuses collisions,
+keeps the source, run evidence, and reviewed copy unchanged, and writes adjacent provenance
+covering sources, scripts, selected shots, providers/models, hashes, the review-copy digest,
+reviewer, and dates.
+
+Provider capability and pricing evidence is dated in
+`specs/002-lala-video-pipeline/research.md`. Unknown voice, storage, or provider costs remain JSON
+`null`; the workflow never fabricates zero or an aggregate. All Goal 2 automated provider clients,
+downloads, clocks, and network behavior are fakes, while one test performs a real local FFmpeg
+export.
 
 ## Approved anchors
 
@@ -74,6 +303,9 @@ automatically load `.env` files.
 | `RUNWAYML_API_SECRET` | Runway API key; required only for live calls |
 | `RUNWAY_ALLOW_LIVE_CALLS=true` | Exact explicit paid-call permission |
 | `RUNWAY_LIVE_SMOKE_TEST=true` | Restricts live execution to exactly one output |
+| `VIDEO_ALLOW_LIVE_CALLS=true` | Separate exact Goal 2 paid-call permission |
+| `VIDEO_LIVE_SMOKE_TEST=true` | Restricts the first video test to one short talking result |
+| `HEYGEN_API_KEY` | HeyGen key; required only for selected live talking work |
 
 Never commit or print real credentials. The CLI and run storage redact secret values, Bearer
 tokens, authorization fields, and data-URI payloads from metadata and errors.

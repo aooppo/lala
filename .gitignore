@@ -25,6 +25,27 @@ outputs/*
 !outputs/approved_keyframes/
 outputs/approved_keyframes/*
 !outputs/approved_keyframes/.gitkeep
+!outputs/audio/
+outputs/audio/*
+!outputs/audio/.gitkeep
+!outputs/talking_shots/
+outputs/talking_shots/*
+!outputs/talking_shots/.gitkeep
+!outputs/broll/
+outputs/broll/*
+!outputs/broll/.gitkeep
+!outputs/edits/
+outputs/edits/*
+!outputs/edits/.gitkeep
+!outputs/final/
+outputs/final/*
+!outputs/final/.gitkeep
+!outputs/reviews/
+outputs/reviews/*
+!outputs/reviews/.gitkeep
+!outputs/approved_videos/
+outputs/approved_videos/*
+!outputs/approved_videos/.gitkeep
 assets/derived/*
 !assets/derived/.gitkeep
 

@@ -17,7 +17,7 @@ limits:
 providers:
   runway:
     api_version: "2024-11-06"
-    sdk_version: "5.14.0"
+    sdk_version: "5.15.0"
     endpoint: /v1/text_to_image
     poll_endpoint: /v1/tasks/{id}
     poll_interval_seconds: 5

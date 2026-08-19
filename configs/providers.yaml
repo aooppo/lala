@@ -1,0 +1,67 @@
+verified_on: "2026-08-19"
+currency: USD
+safety:
+  max_talking_variations_per_shot: 3
+  max_motion_variations_per_shot: 3
+  max_final_edits_per_video: 2
+  max_concurrency: 1
+  max_retries: 2
+  provider_timeout_seconds: 1800
+  allow_live_calls: false
+providers:
+  heygen:
+    responsibility: talking
+    api_base_url: https://api.heygen.com
+    upload_endpoint: /v3/assets
+    submit_endpoint: /v3/videos
+    poll_endpoint: /v3/videos/{task_id}
+    model: avatar_iv
+    max_asset_bytes: 33554432
+    terminal_success: completed
+    terminal_failure: failed
+    pricing:
+      avatar_iv:
+        unit: output_second
+        usd_per_unit: 0.05
+        source: https://developers.heygen.com/docs/pricing
+        verified_on: "2026-08-19"
+  heygen_voice:
+    responsibility: voice
+    api_base_url: https://api.heygen.com
+    submit_endpoint: /v3/voices/speech
+    model: starfish
+    max_text_characters: 5000
+    speed_range: [0.5, 2.0]
+    default_sample_rate: 48000
+    documentation_source: https://developers.heygen.com/reference/generate-speech
+    voice_list_source: https://developers.heygen.com/reference/list-voices
+    verified_on: "2026-08-19"
+    pricing: null
+  runway:
+    responsibility: motion
+    api_version: "2024-11-06"
+    sdk_version: "5.15.0"
+    submit_endpoint: /v1/image_to_video
+    poll_endpoint: /v1/tasks/{task_id}
+    supported_models:
+      gen4_turbo:
+        durations: [2, 3, 4, 5, 6, 7, 8, 9, 10]
+        ratios: ["1280:720"]
+        prompt_required: false
+        credits_per_second: 5
+      gen4.5:
+        durations: [2, 3, 4, 5, 6, 7, 8, 9, 10]
+        ratios: ["1280:720"]
+        prompt_required: true
+        credits_per_second: 12
+    credit_usd: 0.01
+    pricing_source: https://docs.dev.runwayml.com/guides/pricing/
+    pricing_verified_on: "2026-08-19"
+  runway_talking:
+    responsibility: talking
+    api_version: "2024-11-06"
+    sdk_version: "5.15.0"
+    model: gwm1_avatars
+    submit_endpoint: /v1/avatar_videos
+    poll_endpoint: /v1/tasks/{task_id}
+    approved_custom_avatars: {}

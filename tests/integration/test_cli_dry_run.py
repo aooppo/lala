@@ -16,7 +16,7 @@ def test_validate_command_reports_anchors_presets_and_versions(
     assert "baseline_identity" in output
     assert "home_decor" in output
     assert "2024-11-06" in output
-    assert "5.14.0" in output
+    assert "5.15.0" in output
 
 
 def test_generate_dry_run_cli_creates_request_preview(project_root: Path, capsys) -> None:

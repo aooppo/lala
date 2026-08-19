@@ -5,13 +5,14 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "lady-lala-workflow"
 version = "0.1.0"
-description = "Reproducible, provider-neutral Lady LaLa static-image generation workflow"
+description = "Reproducible, provider-neutral Lady LaLa image and video workflow"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
   "Pillow>=10.4,<13",
   "PyYAML>=6.0.2,<7",
-  "runwayml==5.14.0",
+  "httpx>=0.28,<1",
+  "runwayml==5.15.0",
 ]
 
 [project.optional-dependencies]

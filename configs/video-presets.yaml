@@ -1,0 +1,81 @@
+version: "1.0"
+defaults:
+  aspect_ratio: "16:9"
+  resolution: "1280:720"
+  frame_rate: 30
+  talking_shot_variations: 3
+  broll_variations: 3
+  final_edit_variations: 2
+  single_shot_fallback: true
+presets:
+  product_page:
+    script: product_page
+    talking_provider: heygen
+    talking_model: avatar_iv
+    motion_provider: runway
+    motion_model: gen4_turbo
+    alternate_takes: 3
+    shots:
+      - id: talking_performance
+        kind: talking
+        source_role: hero
+        prompt: prompts/talking-motion-v1.txt
+      - id: product_interaction
+        kind: motion
+        source_role: hero
+        prompt: prompts/product-broll-v1.txt
+        duration_seconds: 4
+      - id: reward_visual
+        kind: motion
+        source_role: hero
+        prompt: prompts/product-broll-v1.txt
+        duration_seconds: 4
+      - id: closing
+        kind: local
+        source_role: talking_performance
+  tooltip:
+    script: tooltip
+    talking_provider: heygen
+    talking_model: avatar_iv
+    motion_provider: runway
+    motion_model: gen4_turbo
+    alternate_takes: 3
+    shots:
+      - id: message
+        kind: talking
+        source_role: hero
+        prompt: prompts/talking-motion-v1.txt
+      - id: reward_graphic
+        kind: local
+        source_role: exact_script_graphic
+        optional: true
+  homepage:
+    script: homepage
+    talking_provider: heygen
+    talking_model: avatar_iv
+    motion_provider: runway
+    motion_model: gen4_turbo
+    alternate_takes: 3
+    shots:
+      - id: establishing
+        kind: motion
+        source_role: hero
+        prompt: prompts/home-broll-v1.txt
+        duration_seconds: 4
+      - id: talking_performance
+        kind: talking
+        source_role: hero
+        prompt: prompts/talking-motion-v1.txt
+      - id: product_interaction
+        kind: motion
+        source_role: hero
+        prompt: prompts/product-broll-v1.txt
+        duration_seconds: 4
+      - id: reward_visual
+        kind: motion
+        source_role: hero
+        prompt: prompts/product-broll-v1.txt
+        duration_seconds: 4
+      - id: closing
+        kind: local
+        source_role: talking_performance

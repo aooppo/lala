@@ -111,6 +111,7 @@ name = "lady-lala-workflow"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "httpx" },
     { name = "pillow" },
     { name = "pyyaml" },
     { name = "runwayml" },
@@ -123,10 +124,11 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "httpx", specifier = ">=0.28,<1" },
     { name = "pillow", specifier = ">=10.4,<13" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3,<9" },
     { name = "pyyaml", specifier = ">=6.0.2,<7" },
-    { name = "runwayml", specifier = "==5.14.0" },
+    { name = "runwayml", specifier = "==5.15.0" },
 ]
 provides-extras = ["dev"]
 
@@ -432,7 +434,7 @@ wheels = [
 
 [[package]]
 name = "runwayml"
-version = "5.14.0"
+version = "5.15.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
@@ -442,9 +444,9 @@ dependencies = [
     { name = "sniffio" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/35/bc/55232e81e07c60c89f633ce0fb5ea67da512b97c81f5ad18345d9a0ee774/runwayml-5.14.0.tar.gz", hash = "sha256:f6d581b3f2269ddc2153b5a4e06055d3f59c17895ff2aa9a817d95d79cbd3cf4", size = 335489, upload-time = "2026-08-13T19:11:58.786Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/aa/79/9853993a1f70c35d564dfe91fb51f07f6bee895996fd2e874d0259dbdbae/runwayml-5.15.0.tar.gz", hash = "sha256:6ca5e36b131a568b1ba0bf0cd6943ff9ba3cc03c9736d4f5449f5b46f895ca19", size = 340757, upload-time = "2026-08-18T15:48:26.401Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b6/b5/03fcf831880d994fb42d1856fe94f558085f2898a041dcd0a89f000033de/runwayml-5.14.0-py3-none-any.whl", hash = "sha256:77557c6599d081f34f76d8334e72940fb0dc0f05d8e1a46df10df912f37dc646", size = 278362, upload-time = "2026-08-13T19:11:57.235Z" },
+    { url = "https://files.pythonhosted.org/packages/70/1e/585a6261c20498ee9f8d4ea66f0bdf058b114303cac753caa6c923643f53/runwayml-5.15.0-py3-none-any.whl", hash = "sha256:42c2592b7cd9a2dcfe9c4757af078549f7b7141fea66a8fd4d118e1f3e1b9996", size = 282824, upload-time = "2026-08-18T15:48:24.945Z" },
 ]
 
 [[package]]

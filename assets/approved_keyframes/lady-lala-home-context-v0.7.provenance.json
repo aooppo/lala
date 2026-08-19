@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0.0",
+  "provenance_type": "owner_supplied_legacy_asset",
+  "asset_path": "assets/approved_keyframes/lady-lala-home-context-v0.7.png",
+  "sha256": "ab53d9d0551bcf926a41072567493cf640815d99ff92503d9bc111ec3ce7b9ca",
+  "source_package": "lala-goal2-authoritative-inputs-v1.0.0.zip",
+  "source_package_sha256": "ecb747c66aca39e78de9718439a81c2bff603b3d1992259a43384327071f5282",
+  "source_path": "01_keyframe/video_keyframe_candidate/lady-lala-home-context-v0.7.png",
+  "source_manifest_path": "04_provenance/manifests/keyframe-manifest.json",
+  "source_manifest_sha256": "c5f90517905a5582d5d6801bea1b26563227eeb127b9716b2b6961ac53c297d7",
+  "owner_approval_reference": "current task user request, section 一.2 Goal 2 视频 Keyframe"
+}

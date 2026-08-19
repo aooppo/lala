@@ -174,3 +174,306 @@
 - Remaining work: exactly one paid live image only after valid credentials and explicit owner
   authorization become available; no offline implementation work remains.
 - Paid calls made: 0.
+
+## Checkpoint 10 — Authorized Runway live smoke test
+
+- Files changed: this progress record and the active specification status only; implementation,
+  configuration, prompts, and approved anchors were unchanged.
+- Authorization and cost boundary: local `.env` supplied a non-empty `RUNWAYML_API_SECRET` plus
+  exact `RUNWAY_ALLOW_LIVE_CALLS=true` and `RUNWAY_LIVE_SMOKE_TEST=true`. Exactly one
+  `gen4_image_turbo` candidate was requested and exactly one provider submission occurred.
+- Commands and checks executed:
+  - `uv run python -m lala_workflow validate`
+  - `uv run python -m lala_workflow generate --preset baseline_identity --model gen4_image_turbo --count 1 --dry-run`
+  - `uv run python -m lala_workflow generate --preset baseline_identity --model gen4_image_turbo --count 1 --live`
+    after loading the ignored local `.env`
+  - `uv run python -m lala_workflow report --run-id LALA-RUNWAY-20260818-154718-BASELINE-IDENTITY-001`
+  - `uv run pytest -q` and all three required 10/5/5 dry-run commands
+- Result: live run `LALA-RUNWAY-20260818-154718-BASELINE-IDENTITY-001` completed `SUCCEEDED` in
+  22.328 seconds with one request, one downloaded output, zero errors, and one paid call. Its run
+  directory contains all eight required records; the event log contains authorization, one submit
+  attempt, task submission, polling, terminal success, download, and completion events.
+- Output evidence: `outputs/LALA-RUNWAY-20260818-154718-BASELINE-IDENTITY-001/output-001.png` is a
+  readable 1088 x 1456 RGB PNG with SHA-256
+  `bfb7117235386c6ec0c71c12b302c2621e431ecc03e03be6d717a0a482b729a8`. The report command reads
+  the run successfully and reports provider/model `runway` / `gen4_image_turbo`, one downloaded
+  output, zero errors, and one paid call.
+- Regression result: 63 tests passed in 0.58 seconds. The required baseline/home/product dry runs
+  completed with 10/5/5 requests and zero paid outputs.
+- Security and integrity: the live run/output contain neither the configured secret value nor a
+  Bearer/authorization pattern. All five approved-anchor SHA-256 values still match Checkpoint 1.
+- Blockers: none. SC-010 is now satisfied by the authorized live evidence above.
+- Paid calls made: 1 in this checkpoint; 1 total for the project.
+
+## Goal 2 Checkpoint 1 — Video setup and provider-neutral foundation
+
+- Files changed: Goal 2 pending manifests, video presets/provider capability records, versioned
+  motion prompts, video/audio/editing package namespaces, provider-neutral domain/protocols,
+  immutable script/audio/keyframe validation, append-only video storage primitives, deterministic
+  naming, recursive redaction, nested video CLI routing, synthetic test fakes, dependency pins, and
+  `specs/002-lala-video-pipeline/tasks.md`.
+- Tests executed:
+  - `uv run pytest tests/test_video_provider_contracts.py tests/test_video_scripts.py tests/test_video_media_validation.py tests/unit/test_redaction.py -q`
+  - `uv run pytest tests/unit tests/integration -q`
+- Result: 15 targeted tests and all 63 Goal 1 regression tests passed. The Goal 2 production
+  manifests remain explicitly pending; no keyframe, voice media, or MTL copy was invented.
+- Blockers: authoritative approved keyframe/provenance, approved voice or per-script WAVs, and all
+  three MTL script files/versions/hashes are not present yet. This does not block offline code or
+  mocked integration work.
+- Remaining work: implement safe preview/evidence, provider adapters and live guards, pilot shot
+  workflows, deterministic assembly, review/promotion, full convergence, and documentation.
+- Paid calls made: 0 for Goal 2; no video provider was constructed or contacted.
+
+## Goal 2 Checkpoint 2 — US1 validation, planning, cost preview, and evidence
+
+- Files changed: video prompt loading, deterministic shot planning, approved-WAV resolution,
+  source-dated cost estimation, thirteen-artifact reporting, safe preview runner, validation/report
+  CLI paths, and US1 unit/mocked integration tests.
+- Tests executed: `uv run pytest tests/test_video_config.py tests/test_video_planning.py
+  tests/test_video_dry_run.py -q`.
+- Result: 16 passed. After the pre-US3 audio-integrity correction, synthetic product-page/tooltip/
+  homepage plans resolve 9/3/12 provider calls; single-shot fallback resolves 3. Product-page and
+  homepage use one full-script talking performance plus deterministic closing reuse, avoiding a
+  duplicate rendering of the same approved WAV. Each accepted preview writes thirteen artifacts,
+  byte-exact script evidence, keyframe/audio/anchor hashes, supported estimates, and a header-only
+  blank QA sheet while making zero submissions.
+- Production guard evidence: `video validate` exited 4, reported the approved keyframe, all three
+  MTL script files/metadata, and approved voice/audio blockers together, and left the repository
+  run-directory count unchanged at 24.
+- Blockers: the authoritative Goal 2 input package is still absent; offline provider and assembly
+  implementation can continue.
+- Remaining work: talking/motion adapters and bounded live execution, pilot workflows, local
+  assembly, review/promotion, documentation, and convergence.
+- Paid calls made: 0 for Goal 2.
+
+## Goal 2 Checkpoint 3 — US2 one-result talking smoke under mocks
+
+- Files changed: official-contract HeyGen v3 talking adapter, approved-mapping-only Runway avatar
+  adapter, bounded execution state machine, streamed/validated video download layer, first-smoke
+  live guards, live smoke evidence finalization, and talking-provider mocked tests.
+- Tests executed:
+  - `uv run pytest tests/test_heygen_talking_provider.py tests/test_runway_talking_provider.py tests/test_video_live_execution.py tests/test_video_talking_smoke.py -q`
+  - cumulative Goal 2 targeted slice through US2.
+- Result: 14 US2 tests and 43 cumulative Goal 2 tests passed. The simulated live flow produced one
+  valid MP4 from one approved-status fixture keyframe/audio pair, exactly thirteen run artifacts,
+  one blank QA row, hash/cost/task evidence, and no serialized credential. Tests also prove
+  idempotency-safe pre-ID retry only, no resubmission after task ID, ambiguous-submit fail-closed,
+  bounded polling/download recovery, and terminal timeout behavior.
+- Blockers: an actual provider smoke still requires the real approved input package, credentials,
+  exact paid-call permission, and owner review; no live attempt was made.
+- Remaining work: Runway motion and all three pilot shot workflows, voice Mode B abstraction,
+  deterministic assembly, review/promotion, documentation, and convergence.
+- Paid calls made: 0 for Goal 2.
+
+## Goal 2 Checkpoint 4 — US3 three pilot shot workflows under mocks
+
+- Files changed: current Runway image-to-video adapter, approved-WAV/optional cloned-voice
+  resolution, full pilot live guards and reviewed-smoke gate, sequential shot-generation
+  orchestration, prompt integrity tests, Runway motion tests, and all-preset mocked integrations.
+- Tests executed: `uv run pytest tests/test_video*.py tests/test_heygen_talking_provider.py
+  tests/test_runway_talking_provider.py tests/test_runway_motion_provider.py -q`.
+- Result: 54 passed. Product-page/tooltip/homepage plans produced 9/3/12 simulated provider tasks,
+  respectively, with three talking alternatives, at most three motion alternatives per applicable
+  shot, concurrency one, exact script/audio/keyframe/prompt hashes, per-output blank QA rows,
+  cost/task evidence, and bounded partial-failure recovery. An unreviewed smoke was rejected before
+  any fake call. One full-script talking performance plus deterministic closing reuse prevents
+  duplicate approved-audio rendering in multi-shot presets.
+- Blockers: live pilot work still requires a real passing one-result smoke and its reviewed QA,
+  plus authoritative inputs, credentials, and explicit paid permission.
+- Remaining work: shot selection, FFmpeg assembly, final QA/reporting/promotion, documentation,
+  full suite, security/integrity checks, and convergence.
+- Paid calls made: 0 for Goal 2.
+
+## Goal 2 Checkpoint 5 — US4 human selection and deterministic assembly
+
+- Files changed: immutable selection-manifest validation, argument-safe FFmpeg editor, local
+  assembly orchestration, assembly CLI routing, and selection/FFmpeg/assembly tests.
+- Tests executed:
+  - `uv run pytest tests/test_video_selection.py tests/test_video_ffmpeg.py tests/test_video_assemble.py -q`
+  - cumulative Goal 2 video test selection.
+- Result: 9 US4 tests and 63 cumulative Goal 2 tests passed. A real local FFmpeg integration
+  normalized selected shots, used the full approved-status fixture WAV exactly once, created a cut
+  and logged crossfade candidate named `lady-lala-product-page-candidate-v001.mp4`/`v002.mp4`,
+  validated and hashed both MP4s, wrote a separate thirteen-artifact assembly run and two blank QA
+  rows, and left the source generation run unchanged. Missing, duplicate, unknown, and cross-run
+  selections fail before editing.
+- Blockers: production assembly awaits actual selected shots produced after a real reviewed smoke;
+  local implementation is complete.
+- Remaining work: final review/report/promotion, operating documentation, full regression/security/
+  integrity verification, and convergence.
+- Paid calls made: 0 for Goal 2; assembly constructs no provider.
+
+## Goal 2 Checkpoint 6 — US5 review, reporting, and approved-video promotion
+
+- Files changed: exact QA review parser, evidence-backed video reports, integrity-gated copy-only
+  final-video promotion, report/promote CLI routing, and review/report/promotion tests.
+- Tests executed:
+  - `uv run pytest tests/test_video_review.py tests/test_video_reporting.py tests/test_video_promotion.py -q`
+  - cumulative Goal 2 video test selection.
+- Result: 7 US5 tests and 70 cumulative Goal 2 tests passed. QA headers are exact, new human fields
+  are blank, review parsing is read-only, unknown pricing remains null, and an explicitly ready
+  hash-verified candidate is copied to deterministic approved versions without changing the
+  candidate or reviewed CSV. Provenance records the exact MTL script, audio, keyframe/anchors,
+  selected shots, providers/models, reviewer, and timestamps; collisions are refused.
+- Blockers: real MTL review/promotion awaits real generated candidates; no decision was fabricated.
+- Remaining work: documentation, full regression/command/integrity/security verification, Spec Kit
+  convergence, and conditional live-stage decision.
+- Paid calls made: 0 for Goal 2.
+
+## Goal 2 Checkpoint 7 — Offline-complete video pipeline and convergence remediation
+
+- Files changed: active Goal 2 Spec Kit artifacts; provider-neutral video/audio/editing domains;
+  HeyGen talking, restricted Runway talking, and Runway motion adapters; immutable input and
+  reviewed-copy validation; append-only thirteen-artifact storage; guarded live orchestration;
+  deterministic FFmpeg assembly; reporting/promotion; pending production manifests; tests;
+  `README.md`; `AGENTS.md`; and this append-only progress record.
+- Final offline verification:
+  - `uv sync --extra dev`: resolved 23 packages and checked 22.
+  - `uv run pytest -q`: 145 passed in 17.44 seconds with the global network prohibition active.
+  - `uv run python -m compileall -q src tests`: passed.
+  - real local FFmpeg/assembly plus all-three-preview 60-second check: 5 passed in 2.01 seconds.
+  - static-image validation and required dry runs passed with 10/5/5 requests at
+    `LALA-RUNWAY-20260819-035448-BASELINE-IDENTITY-001`,
+    `LALA-RUNWAY-20260819-035448-HOME-DECOR-001`, and
+    `LALA-RUNWAY-20260819-035448-PRODUCT-PAGE-CLEAN-001`.
+- Goal 2 production guard evidence: `video validate` and product-page/tooltip/homepage previews each
+  exited 4 with the complete missing approved-keyframe, three-script, and voice/audio blocker. Run
+  directory count remained 33 before and after, proving no partial production run or provider call.
+- Convergence remediation: approved script-matched WAVs now take precedence in either voice mode;
+  provider-neutral cloned voice can feed one bounded talking result; smoke/final human QA uses an
+  explicit hash-recorded copy under `outputs/reviews/` while run evidence remains blank and
+  immutable; post-allocation voice/smoke failures receive all thirteen sanitized artifacts; and
+  approved-video promotion is strictly monotonic and cleans both outputs on incomplete provenance.
+- Integrity/security: all five approved-anchor SHA-256 values exactly match the Checkpoint 1
+  baseline. Credential-value and run/output Bearer/authorization scans returned no matches;
+  `.env`, keys, and runtime audio/video are not tracked; `git diff --check`, untracked-text
+  whitespace scans, and compilation passed. The pre-existing Goal 1 specification status edit was
+  preserved unchanged.
+- Goal 2 status: offline implementation and mocked acceptance are complete. Actual production dry
+  runs, a live talking smoke, the three rendered pilot videos, and MTL promotion remain external,
+  input- and approval-dependent stages rather than code failures.
+- Blocker: `BLOCKED_EXTERNAL: Goal 2 production execution requires at least one human-approved Goal
+  1 keyframe with matching promotion provenance, authoritative MTL product-page/tooltip/homepage
+  script files with versions and SHA-256 values, and approved Lady LaLa per-script WAVs or an
+  approved reusable voice/profile. Live work additionally requires provider credentials, exact
+  VIDEO_ALLOW_LIVE_CALLS=true, exact VIDEO_LIVE_SMOKE_TEST=true for the first one-result smoke,
+  explicit owner budget authorization, and a separate reviewed smoke QA copy before any broader
+  generation.`
+- Paid calls made: 0 for Goal 2; the repository's previously authorized Goal 1 image call remains
+  the only project paid call recorded in this file.
+
+## Goal 2 Checkpoint 8 — Staged talking validation and concrete cloned voice
+
+- Files changed: reviewed post-first-smoke talking validation, HeyGen Starfish voice adapter,
+  provider configuration/factory wiring, synthesized-audio task provenance, regression tests,
+  official-provider research, CLI/quickstart/operator documentation, Spec Kit traceability, and
+  this append-only checkpoint.
+- Behavior: the first live video test remains exactly one 8–12-second talking result and still
+  requires exact `VIDEO_LIVE_SMOKE_TEST=true`. Only after that result has a successful immutable
+  external QA copy may a separate talking-only run execute up to three alternatives, sequentially
+  and under the general live guard. Full pilots retain their reviewed-smoke prerequisite.
+- Voice Mode B: an approved `heygen_voice` / `starfish` private voice profile can now submit the
+  exact immutable script to HeyGen speech generation, download within bounded retries/overall
+  timeout, convert to validated PCM WAV, and record provider request ID, script hash, and source
+  provenance. A configured approved per-script WAV remains preferred, and no generated WAV is
+  promoted implicitly.
+- Verification:
+  - focused T076–T078 suite: 36 passed in 5.67 seconds.
+  - `uv run pytest -q`: 152 passed in 18.88 seconds with network blocked.
+  - `uv sync --extra dev` and `uv run python -m compileall -q src tests`: passed.
+  - static validation and required 10/5/5 dry runs passed at
+    `LALA-RUNWAY-20260819-041224-BASELINE-IDENTITY-001`,
+    `LALA-RUNWAY-20260819-041224-HOME-DECOR-001`, and
+    `LALA-RUNWAY-20260819-041224-PRODUCT-PAGE-CLEAN-001`; each contains eight artifacts.
+  - all five approved-anchor SHA-256 values match the Checkpoint 1 baseline exactly.
+  - runtime evidence contains no Bearer/authentication/signed-query material; source contains no
+    credential-looking Bearer literal; no derived WAV/MP4 is tracked; `git diff --check` passed.
+- Goal 2 production guard evidence: `video validate` plus product-page, tooltip, and homepage
+  previews each exited 4 with the complete approved-keyframe, three-script, and voice/audio
+  blocker. Run count stayed 36 before and after, proving no partial video run or provider call.
+- Blocker: `BLOCKED_EXTERNAL: Goal 2 production execution requires a human-approved Goal 1
+  keyframe with matching promotion provenance, authoritative MTL product-page/tooltip/homepage
+  scripts with versions and SHA-256 values, and approved per-script Lady LaLa WAVs or an approved
+  reusable HeyGen Starfish private voice profile. Any live stage additionally requires local
+  credentials, exact VIDEO_ALLOW_LIVE_CALLS=true, explicit owner budget permission, exact
+  VIDEO_LIVE_SMOKE_TEST=true for the first one-result smoke, and the required immutable human QA
+  copy before expansion or full generation.`
+- Paid calls made: 0 for Goal 2; the repository's previously authorized Goal 1 image call remains
+  the only project paid call recorded in this file.
+
+## Goal 2 Checkpoint 9 — Final continuation and external-blocker audit
+
+- Files changed: this append-only verification checkpoint only; application code, approved inputs,
+  and completed Spec Kit tasks were unchanged during the audit.
+- Verification:
+  - `uv sync --extra dev`: resolved 23 packages and checked 22.
+  - `uv run pytest -q`: 152 passed in 18.73 seconds with the global network prohibition active.
+  - `uv run python -m compileall -q src tests`: passed.
+  - Goal 1 validation and required 10/5/5 dry runs passed at
+    `LALA-RUNWAY-20260819-042430-BASELINE-IDENTITY-001`,
+    `LALA-RUNWAY-20260819-042430-HOME-DECOR-001`, and
+    `LALA-RUNWAY-20260819-042430-PRODUCT-PAGE-CLEAN-001`.
+  - Goal 2 `video validate`, talking-smoke preview, and all three pilot previews each exited 4 with
+    the complete authoritative-input blocker; the run count remained 39 before and after.
+  - all five approved-anchor SHA-256 values still exactly match the Checkpoint 1 baseline.
+  - runtime credential/Bearer/authorization/signed-query scans, source high-entropy scans, tracked
+    runtime-media checks, task-format/completion checks, and `git diff --check` passed.
+- Convergence: 35 functional requirements, 14 success criteria, 16 acceptance scenarios, seven
+  plan decisions, and five constitution principles were rechecked. No missing, partial,
+  contradictory, or unrequested implementation finding remains; all 78 tasks stay complete.
+- Blocker: `BLOCKED_EXTERNAL: Goal 2 production execution requires a human-approved Goal 1
+  keyframe with matching promotion provenance, authoritative MTL product-page/tooltip/homepage
+  scripts with versions and SHA-256 values, and approved per-script Lady LaLa WAVs or an approved
+  reusable HeyGen Starfish private voice profile. Any live stage additionally requires local
+  credentials, exact VIDEO_ALLOW_LIVE_CALLS=true, explicit owner budget permission, exact
+  VIDEO_LIVE_SMOKE_TEST=true for the first one-result smoke, and the required immutable human QA
+  copy before expansion or full generation.`
+- Paid calls made: 0 for Goal 2 in this checkpoint and in total; the repository's previously
+  authorized Goal 1 image call remains the only project paid call recorded in this file.
+
+## Goal 2 Checkpoint 10 — Authoritative input import and offline validation
+
+- Package verification: `/Users/tj/Downloads/lala-goal2-authoritative-inputs-v1.0.0.zip` passed
+  `unzip -t`, all package `SHA256SUMS.txt` checks, safe target-existence checks, and has received
+  SHA-256 `ecb747c66aca39e78de9718439a81c2bff603b3d1992259a43384327071f5282`.
+- Keyframe decision: no genuine Goal 1 promoted keyframe exists in
+  `assets/approved_keyframes/` or `outputs/approved_keyframes/`. The owner-selected
+  `lady-lala-home-context-v0.7.png` was copied to `assets/approved_keyframes/` byte-exactly and
+  registered as `owner_supplied_legacy_asset`, with package/name/hash/source-path and owner-request
+  provenance only. No Goal 1 run/output, provider task, prompt/model, reviewer, or approval time
+  was invented. Generated-promotion tests remain strict.
+- Script import: `assets/scripts/product-page.txt`, `tooltip.txt`, and `homepage.txt` are exact
+  package copies at version `1.0.0`, attributed to MTL Appendix A with SHA-256 values
+  `62cbee3e53ea53627f0e517e4d414183d4ad376fc2764dd8a3ded267ae5d5a08`,
+  `1f588cbbd03be867581833caddf6828282b47175ffcf840af9e2c42b1e3d7c6e`, and
+  `6aeddc065fd3fe66338ef17b9c5b66dd0f3ae633dd1e1571f9565444461b2475`.
+- Voice import: eight byte-exact canonical clone-source WAVs now live under
+  `assets/voice/source/` and are hash/media-validated through
+  `assets/voice/metadata/canonical-source-manifest-v1.0.0.json`. They remain source material only;
+  `script_audio` is empty, `mode`/`approval_status` remain `pending`, and no Starfish `voice_id`
+  was fabricated.
+- Implementation: added a provider-neutral keyframe provenance union, a narrow legacy branch that
+  rejects generated/fabricated claims, per-script `source_reference`, canonical PCM WAV manifest
+  validation, and regression tests proving canonical sources do not satisfy narration/profile
+  approval. Goal 2 Spec Kit artifacts, configuration contracts, quickstart, research, README, and
+  Phase 11 tasks were updated traceably.
+- Verification:
+  - focused import/validation slice: 31 passed.
+  - `uv run pytest -q`: 160 passed in 19.48 seconds with network blocked.
+  - `uv run python -m compileall -q src tests`: passed.
+  - Goal 1 validation and 10/5/5 dry runs passed at
+    `LALA-RUNWAY-20260819-050155-BASELINE-IDENTITY-001`,
+    `LALA-RUNWAY-20260819-050155-HOME-DECOR-001`, and
+    `LALA-RUNWAY-20260819-050155-PRODUCT-PAGE-CLEAN-001`.
+  - Goal 2 `video validate`, tooltip talking-smoke dry-run, and product-page/tooltip/homepage pilot
+    previews each exited 4 with the same sole Voice blocker; the run count stayed 42 before/after.
+  - all imported members matched their package sources with `cmp` and SHA-256; all five approved
+    anchor hashes still match Checkpoint 1; secret/signed-query/runtime-media scans and
+    `git diff --check` passed.
+- Blocker: `BLOCKED_EXTERNAL: Goal 2 still requires a real approved HeyGen Starfish/private Lady
+  LaLa voice profile or approved per-script Lady LaLa narration WAVs.`
+- Live readiness: not ready. A real approved Starfish/private profile or three approved
+  script-matched narration WAVs must be supplied before the separately required credentials,
+  budget permission, exact live flags, and staged human review can become relevant.
+- Paid calls made: 0 for this import and offline-validation checkpoint; the earlier authorized
+  Goal 1 image call remains outside this Goal 2 task.

@@ -1,0 +1,95 @@
+{
+  "schema_version": "1.0.0",
+  "role": "canonical Lady LaLa voice-cloning source material",
+  "status": "source_material_ready_profile_or_per_script_audio_still_required",
+  "source_package": {
+    "name": "lala-goal2-authoritative-inputs-v1.0.0.zip",
+    "sha256": "ecb747c66aca39e78de9718439a81c2bff603b3d1992259a43384327071f5282",
+    "manifest_path": "04_provenance/manifests/voice-manifest.json",
+    "manifest_sha256": "0bd57271dfc0ada92ef870b9c7fcb40ec1e8c9337ad178c79efcaf4edb2a1a48"
+  },
+  "clips": [
+    {
+      "path": "assets/voice/source/lady-lala-canonical-clip-00-v1.0.wav",
+      "source_path": "03_voice/canonical_source/lady-lala-canonical-clip-00-v1.0.wav",
+      "sha256": "b8e3cc1bb81302bf3e6623de3ba176020f7c777d6d47a7f7e66c3d0a893cba2b",
+      "bytes": 1167462,
+      "codec": "pcm_s24le",
+      "sample_rate_hz": 48000,
+      "channels": 1,
+      "duration_seconds": 8.106667
+    },
+    {
+      "path": "assets/voice/source/lady-lala-canonical-clip-01-v1.0.wav",
+      "source_path": "03_voice/canonical_source/lady-lala-canonical-clip-01-v1.0.wav",
+      "sha256": "cf1931b522cc226661d7fa7f47073676a3051f2d38cf918eeae209ae4e768164",
+      "bytes": 1450086,
+      "codec": "pcm_s24le",
+      "sample_rate_hz": 48000,
+      "channels": 1,
+      "duration_seconds": 10.069333
+    },
+    {
+      "path": "assets/voice/source/lady-lala-canonical-clip-02-v1.0.wav",
+      "source_path": "03_voice/canonical_source/lady-lala-canonical-clip-02-v1.0.wav",
+      "sha256": "d531ef2df71966bcb4f75b5049cadda95deaea37058e751efbc506c99ac3e23d",
+      "bytes": 1757286,
+      "codec": "pcm_s24le",
+      "sample_rate_hz": 48000,
+      "channels": 1,
+      "duration_seconds": 12.202667
+    },
+    {
+      "path": "assets/voice/source/lady-lala-canonical-clip-03-v1.0.wav",
+      "source_path": "03_voice/canonical_source/lady-lala-canonical-clip-03-v1.0.wav",
+      "sha256": "199e0cd4cedc552f52f2e107b5af5632951c4699140944d65ceb0fc6b145bcbd",
+      "bytes": 2162790,
+      "codec": "pcm_s24le",
+      "sample_rate_hz": 48000,
+      "channels": 1,
+      "duration_seconds": 15.018667
+    },
+    {
+      "path": "assets/voice/source/lady-lala-canonical-clip-04-v1.0.wav",
+      "source_path": "03_voice/canonical_source/lady-lala-canonical-clip-04-v1.0.wav",
+      "sha256": "3a9ea7b348d6cd16baad977024313e9935378c6871059bd5c5de57578623d0eb",
+      "bytes": 1450086,
+      "codec": "pcm_s24le",
+      "sample_rate_hz": 48000,
+      "channels": 1,
+      "duration_seconds": 10.069333
+    },
+    {
+      "path": "assets/voice/source/lady-lala-canonical-clip-05-v1.0.wav",
+      "source_path": "03_voice/canonical_source/lady-lala-canonical-clip-05-v1.0.wav",
+      "sha256": "f77a60592047efdb0c4523a91f70fabff5cc3d04de9c79d54a58c28df08e7303",
+      "bytes": 1142886,
+      "codec": "pcm_s24le",
+      "sample_rate_hz": 48000,
+      "channels": 1,
+      "duration_seconds": 7.936
+    },
+    {
+      "path": "assets/voice/source/lady-lala-canonical-clip-06-v1.0.wav",
+      "source_path": "03_voice/canonical_source/lady-lala-canonical-clip-06-v1.0.wav",
+      "sha256": "710cb45df42c9d45a7d8115d2da520791b90d290871e6c0ed34d42af9f85cbe8",
+      "bytes": 1265766,
+      "codec": "pcm_s24le",
+      "sample_rate_hz": 48000,
+      "channels": 1,
+      "duration_seconds": 8.789333
+    },
+    {
+      "path": "assets/voice/source/lady-lala-canonical-clip-07-v1.0.wav",
+      "source_path": "03_voice/canonical_source/lady-lala-canonical-clip-07-v1.0.wav",
+      "sha256": "0db166d35f3bd28405e953af6b89437bd348190aed79aa28dd97a17734db6914",
+      "bytes": 1152102,
+      "codec": "pcm_s24le",
+      "sample_rate_hz": 48000,
+      "channels": 1,
+      "duration_seconds": 8.0
+    }
+  ],
+  "total_duration_seconds": 80.192,
+  "acceptance_rule": "These canonical clips are source material only. They are not product-page, tooltip, or homepage narration. Goal 2 live talking execution still requires approved per-script Lady LaLa WAVs or a real approved HeyGen Starfish/private voice profile."
+}

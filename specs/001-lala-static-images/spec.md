@@ -4,7 +4,7 @@
 
 **Created**: 2026-08-18
 
-**Status**: Implemented; offline acceptance complete, live smoke test externally blocked
+**Status**: Implemented; offline acceptance and authorized one-image live smoke test complete
 
 **Input**: User description: "Build a production-ready, reproducible Lady LaLa static-image generation pipeline using approved anchors as the only authoritative visual identity source."
 

@@ -1,0 +1,23 @@
+source: MTL
+modification_policy: immutable
+source_package:
+  name: lala-goal2-authoritative-inputs-v1.0.0.zip
+  sha256: ecb747c66aca39e78de9718439a81c2bff603b3d1992259a43384327071f5282
+  manifest_path: 04_provenance/manifests/scripts-manifest.json
+  manifest_sha256: 2e3721fcbad10e29ad412fd04c30f8fea7b23da7b6f46ec6e792dad9949e2c4f
+scripts:
+  product_page:
+    path: assets/scripts/product-page.txt
+    version: 1.0.0
+    sha256: 62cbee3e53ea53627f0e517e4d414183d4ad376fc2764dd8a3ded267ae5d5a08
+    source_reference: lala-goal2-authoritative-inputs-v1.0.0.zip::02_scripts/product-page-v1.0.0.txt; MTL Appendix A source copy
+  tooltip:
+    path: assets/scripts/tooltip.txt
+    version: 1.0.0
+    sha256: 1f588cbbd03be867581833caddf6828282b47175ffcf840af9e2c42b1e3d7c6e
+    source_reference: lala-goal2-authoritative-inputs-v1.0.0.zip::02_scripts/tooltip-v1.0.0.txt; MTL Appendix A source copy
+  homepage:
+    path: assets/scripts/homepage.txt
+    version: 1.0.0
+    sha256: 6aeddc065fd3fe66338ef17b9c5b66dd0f3ae633dd1e1571f9565444461b2475
+    source_reference: lala-goal2-authoritative-inputs-v1.0.0.zip::02_scripts/homepage-v1.0.0.txt; MTL Appendix A source copy

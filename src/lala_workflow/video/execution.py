@@ -26,6 +26,8 @@ class ExecutionRecord:
     artifacts: tuple[MediaArtifact, ...]
     error_code: str | None = None
     error_message: str | None = None
+    estimated_credits: float | None = None
+    actual_credits: float | None = None
 
 
 def validate_live_smoke_guards(
@@ -103,6 +105,9 @@ def execute_provider_request(
             "provider_task_id": task_id,
             "status": result.status.value,
             "error_code": result.error_code,
+            "error_message": result.error_message,
+            "estimated_credits": result.estimated_credits,
+            "actual_credits": result.actual_credits,
         },
     )
     if result.status is not VideoTaskStatus.SUCCEEDED:
@@ -114,6 +119,8 @@ def execute_provider_request(
             (),
             result.error_code,
             result.error_message,
+            result.estimated_credits,
+            result.actual_credits,
         )
     artifacts = provider.download_results(
         result,
@@ -138,4 +145,6 @@ def execute_provider_request(
         result.status,
         submission_attempts,
         validated,
+        estimated_credits=result.estimated_credits,
+        actual_credits=result.actual_credits,
     )

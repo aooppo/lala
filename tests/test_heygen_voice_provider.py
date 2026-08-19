@@ -99,10 +99,12 @@ def test_translates_exact_script_and_downloads_pcm_wav(
         "speed": 1.1,
         "language": "en",
     }
-    assert kwargs["headers"]["X-Api-Key"] == "local-test-secret"
+    assert kwargs["headers"] == {"x-api-key": "local-test-secret"}
     assert downloads == ["https://files.heygen.test/generated.wav?signature=private"]
     assert artifact.path == request.output_path
     assert artifact.mime_type == "audio/wav"
+    assert artifact.provenance["submission_policy"] == "single_submit_no_automatic_replay"
+    assert "idempotency_key" not in artifact.provenance
     assert artifact.provider_task_id == "voice-request-123"
     assert artifact.source_url_redacted == "https://files.heygen.test/generated.wav"
     assert artifact.provenance["reported_duration_seconds"] == 10

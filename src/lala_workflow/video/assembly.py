@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +10,7 @@ from ..hashing import sha256_file
 from .config import VideoConfigError, load_video_config
 from .domain import MediaArtifact
 from .naming import next_candidate_path
+from .graphics import resolve_preset_graphics
 from .reporting import blank_review_rows, summary_markdown
 from .selection import load_shot_selection
 from .storage import VideoRunStorage
@@ -82,6 +83,30 @@ def assemble_video(
         {"source_run_id": source_run_id, "final_edits": count, "provider_calls": 0},
     )
     output_dir = config.root / "outputs/final" / run.run_id
+    graphics = resolve_preset_graphics(
+        config.root,
+        preset=preset_name,
+        run_id=run.run_id,
+        exact_script=script_bytes,
+        script_sha256=str(script_hash.get("sha256") or ""),
+    )
+    graphic_evidence = [
+        {
+            "asset_id": item.asset_id,
+            "path": item.path.relative_to(config.root),
+            "sha256": item.sha256,
+            "version": item.version,
+            "approval_status": item.approval_status,
+            "draft": item.draft,
+            "reviewer": item.reviewer,
+            "reviewed_at": item.reviewed_at,
+            "source_reference": item.source_reference,
+            "provenance": item.provenance,
+        }
+        for item in graphics
+    ]
+    has_draft_graphics = any(item.draft for item in graphics)
+    review_status = "REVIEW_READY_DRAFT_ASSETS" if has_draft_graphics else "REVIEW_READY"
     edit = editor or FFmpegEditor()
     candidates: list[MediaArtifact] = []
     commands: list[str] = []
@@ -99,6 +124,15 @@ def assemble_video(
             transition_seconds=transition,
             timeout_seconds=config.limits.provider_timeout_seconds,
             artifact_id=output_path.stem,
+            graphic_paths=tuple(item.path for item in graphics),
+        )
+        artifact = replace(
+            artifact,
+            provenance={
+                **dict(artifact.provenance),
+                "graphics": graphic_evidence,
+                "contains_draft_brand_assets": has_draft_graphics,
+            },
         )
         candidates.append(artifact)
         commands.append(command)
@@ -134,6 +168,8 @@ def assemble_video(
             "selection": selection_evidence,
             "final_edits": count,
             "provider_call_count": 0,
+            "graphics": graphic_evidence,
+            "contains_draft_brand_assets": has_draft_graphics,
         },
     )
     storage.write_yaml_new(
@@ -147,6 +183,8 @@ def assemble_video(
             "final_edits": count,
             "transitions": [0.0 if index == 1 else 0.25 for index in range(1, count + 1)],
             "provider_calls": 0,
+            "graphics": graphic_evidence,
+            "contains_draft_brand_assets": has_draft_graphics,
         },
     )
     storage.write_bytes_new(run, "script.txt", script_bytes)
@@ -156,18 +194,26 @@ def assemble_video(
     storage.write_json_new(
         run,
         "shot-plan.json",
-        {"source_plan": source_plan, "selection": selection_evidence, "candidate_count": count},
+        {
+            "source_plan": source_plan,
+            "selection": selection_evidence,
+            "candidate_count": count,
+            "graphics": graphic_evidence,
+            "contains_draft_brand_assets": has_draft_graphics,
+        },
     )
     storage.write_json_new(
         run,
         "provider-results.json",
         {
-            "status": "REVIEW_READY",
+            "status": review_status,
             "submission_count": 0,
             "successful_outputs": len(candidates),
             "failed_outputs": 0,
             "source_run_id": source_run_id,
             "results": candidate_evidence,
+            "graphics": graphic_evidence,
+            "contains_draft_brand_assets": has_draft_graphics,
         },
     )
     storage.write_text_new(run, "edit-commands.txt", "\n".join(commands) + "\n")
@@ -190,13 +236,13 @@ def assemble_video(
         summary_markdown(
             run_id=run.run_id,
             preset=preset_name,
-            status="REVIEW_READY",
+            status=review_status,
             provider_call_count=0,
             output_count=len(candidates),
             total_provider_cost=None,
         ),
     )
-    storage.append_event(run, "assembly_completed", {"status": "REVIEW_READY"})
+    storage.append_event(run, "assembly_completed", {"status": review_status})
     storage.assert_complete(run)
     return AssemblyOutcome(
         run.run_id,
@@ -204,7 +250,7 @@ def assemble_video(
         source_run_id,
         tuple(candidates),
         0,
-        "REVIEW_READY",
+        review_status,
     )
 
 
@@ -231,4 +277,14 @@ def _artifact_evidence(artifact: MediaArtifact, project_root: Path) -> dict[str,
         "duration_seconds": artifact.duration_seconds,
         "width": artifact.width,
         "height": artifact.height,
+        "container": artifact.container,
+        "video_codec": artifact.video_codec,
+        "pixel_format": artifact.pixel_format,
+        "average_frame_rate": artifact.average_frame_rate,
+        "audio_stream_present": artifact.audio_stream_present,
+        "audio_codec": artifact.audio_codec,
+        "sample_rate": artifact.sample_rate,
+        "channel_count": artifact.channel_count,
+        "bit_rate": artifact.bit_rate,
+        "provenance": artifact.provenance,
     }

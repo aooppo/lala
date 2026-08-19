@@ -188,3 +188,53 @@ promotion branch remains unchanged and fully strict.
   of the three exact scripts.
 - Creating a Starfish voice automatically: rejected because it would be a paid call and would
   invent an approval boundary.
+
+## Decision 8 — 2026-08-19 production API contract refresh
+
+**Decision**: Keep HeyGen v3 and Runway API version `2024-11-06`, but correct the implementation
+to the current official contracts. HeyGen asset upload uses `multipart/form-data` field `file`, a
+32 MB maximum, and `data.asset_id`. HeyGen mutation idempotency keys are 1–255 characters from
+`[A-Za-z0-9_:.-]`, replay for 24 hours per endpoint/resource, and return `409
+request_in_progress` while the original request is in flight. Video failures use `failure_code`
+and `failure_message`. Arbitrary-image video requests use `type=image`, an asset input, exactly one
+audio source, and only capability-supported optional fields. Runway `gen4.5` image-to-video
+requires non-empty `promptText`, `promptImage`, ratio, integer duration 2–10, and may include a
+seed. The pinned official SDK requires `promptImage`, model, and ratio for `gen4_turbo`, while its
+prompt text and duration remain optional; this workflow still supplies a bounded duration and may
+supply a versioned prompt without claiming either is universally required. Terminal tasks expose
+final `cost.credits` while submissions/pending tasks expose `estimatedCost.credits`.
+
+The current Starfish `POST /v3/voices/speech` OpenAPI operation does not declare the shared
+`Idempotency-Key` parameter or a `409` response, unlike asset upload and video creation. Speech is
+therefore submitted at most once per run attempt with no automatic mutation replay; an ambiguous
+response fails closed and preserves unknown cost/submission evidence. The workflow MUST NOT send
+or claim support for an undocumented idempotency header merely because other HeyGen mutations
+support it.
+
+**Rationale**: The 2026-08-19 official HeyGen reference explicitly documents multipart upload,
+idempotency semantics, current failure fields, image/video unions, and voice query filters. The
+official Runway API reference and generated Python SDK 5.15.0 distinguish required `gen4.5`
+prompt text from optional `gen4_turbo` prompt text, limit data-URI images to 5 MB, and expose final
+terminal credits separately from estimates. These sources supersede assumptions in the first Goal
+2 implementation.
+
+**Official evidence checked 2026-08-19**:
+
+- `https://developers.heygen.com/reference/upload-asset`
+- `https://developers.heygen.com/reference/create-video`
+- `https://developers.heygen.com/reference/get-video`
+- `https://developers.heygen.com/reference/get-voice`
+- `https://developers.heygen.com/reference/list-voices`
+- `https://developers.heygen.com/reference/generate-speech`
+- `https://developers.heygen.com/docs/pricing`
+- `https://docs.dev.runwayml.com/api/`
+- `https://docs.dev.runwayml.com/guides/pricing/`
+- official `runwayml==5.15.0` generated request/response type signatures installed from PyPI
+
+**Alternatives considered**:
+
+- Preserve the raw-body HeyGen upload: rejected because it cannot satisfy the documented file
+  field and multipart boundary contract.
+- Treat unknown cost as zero: rejected because estimates and final charges are distinct evidence.
+- Make motion smoke depend on narration: rejected because Runway image-to-video needs neither
+  HeyGen nor speech and must be reviewable as a separate capability.

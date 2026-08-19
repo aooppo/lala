@@ -78,13 +78,20 @@ class RunwayMotionProvider:
     def translate_request(self, request: MotionVideoRequest) -> dict[str, Any]:
         self.validate_request(request)
         mime_type = "image/png" if request.image_path.suffix.lower() == ".png" else "image/jpeg"
+        models = self.settings.get("supported_models")
+        model = models.get(request.model) if isinstance(models, dict) else {}
+        maximum = int(model.get("max_prompt_image_data_uri_bytes") or 5_242_880)
         payload: dict[str, Any] = {
             "model": request.model,
-            "prompt_image": file_to_data_uri(request.image_path, mime_type, 32_000_000),
-            "prompt_text": request.prompt_text,
+            "prompt_image": file_to_data_uri(request.image_path, mime_type, maximum),
             "ratio": request.ratio,
             "duration": request.duration_seconds,
         }
+        # The current SDK/API treats prompt_text as optional for gen4_turbo;
+        # sending an empty field changes validation semantics, so include it
+        # only when the model/request actually has text.
+        if request.prompt_text.strip():
+            payload["prompt_text"] = request.prompt_text
         if request.seed is not None:
             payload["seed"] = request.seed
         return payload
@@ -135,11 +142,17 @@ class RunwayMotionProvider:
             consecutive_errors = 0
             status = str(getattr(response, "status", "")).upper()
             if status == "SUCCEEDED":
+                cost = getattr(response, "cost", None)
                 return VideoTaskResult(
                     task_id,
                     VideoTaskStatus.SUCCEEDED,
                     tuple(str(url) for url in getattr(response, "output", ()) or ()),
                     estimated_credits=self._estimated_credits.get(task_id),
+                    actual_credits=(
+                        float(getattr(cost, "credits"))
+                        if getattr(cost, "credits", None) is not None
+                        else None
+                    ),
                 )
             if status in {"FAILED", "CANCELLED"}:
                 normalized = (
@@ -151,6 +164,11 @@ class RunwayMotionProvider:
                     estimated_credits=self._estimated_credits.get(task_id),
                     error_code=str(getattr(response, "failure_code", None) or status.lower()),
                     error_message=redact_text(str(getattr(response, "failure", status.lower()))),
+                    actual_credits=(
+                        float(getattr(getattr(response, "cost", None), "credits"))
+                        if getattr(getattr(response, "cost", None), "credits", None) is not None
+                        else None
+                    ),
                 )
             if status not in {"PENDING", "THROTTLED", "RUNNING"}:
                 return VideoTaskResult(

@@ -12,10 +12,14 @@ from ..domain import to_primitive
 from ..hashing import sha256_file
 from .config import VideoConfigError, load_video_config
 from .costing import estimate_plan_cost
+from .budget import BudgetLimits, check_actual, check_estimate, require_explicit_budget
 from .domain import (
     ApprovedAudio,
     ApprovedKeyframe,
     MotionVideoRequest,
+    PlannedRequest,
+    PlannedShot,
+    ResolvedPrompt,
     ScriptRecord,
     ShotPlan,
     TalkingVideoRequest,
@@ -29,10 +33,12 @@ from .execution import (
     validate_live_smoke_guards,
 )
 from .planning import build_shot_plan
+from .prompts import load_video_prompt
 from .reporting import blank_review_rows, read_video_summary, summary_markdown
 from .review import ReviewError, load_external_review_row
 from .storage import QA_FIELDS, VideoRunContext, VideoRunStorage
 from .validation import ExternalInputBlocked
+from .downloads import generate_video_evidence
 from .voice import resolve_approved_audio, resolve_or_synthesize_audio
 
 
@@ -48,7 +54,12 @@ class VideoRunOptions:
     live: bool = False
     smoke_run_id: str | None = None
     smoke_review_file: Path | None = None
+    motion_smoke_run_id: str | None = None
+    motion_smoke_review_file: Path | None = None
     provider_name: str | None = None
+    max_provider_cost_usd: float | None = None
+    max_runway_credits: float | None = None
+    accept_unknown_provider_cost: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,6 +127,7 @@ def preview_video(project_root: Path, options: VideoRunOptions) -> VideoRunOutco
         config,
         talking_duration_seconds=audio.duration_seconds if audio is not None else None,
     )
+    preview_budgets = _budget_limits(options)
     storage = VideoRunStorage(config.root)
     run = storage.create_run(options.preset)
     storage.append_event(
@@ -133,10 +145,26 @@ def preview_video(project_root: Path, options: VideoRunOptions) -> VideoRunOutco
             "action": options.action,
             "preset": options.preset,
             "provider_call_count": plan.provider_call_count,
+            "budget": _budget_evidence(
+                preview_budgets,
+                cost.get("total_provider_cost"),
+                _estimate_motion_credits(config, plan),
+            ),
             "requests": requests,
         },
     )
-    storage.write_yaml_new(run, "resolved-config.yaml", _resolved_config(config, options, plan))
+    storage.write_yaml_new(
+        run,
+        "resolved-config.yaml",
+        {
+            **_resolved_config(config, options, plan),
+            "budget": _budget_evidence(
+                preview_budgets,
+                cost.get("total_provider_cost"),
+                _estimate_motion_credits(config, plan),
+            ),
+        },
+    )
     storage.write_bytes_new(run, "script.txt", script.content)
     storage.write_json_new(run, "script-hash.json", _script_evidence(script))
     storage.write_json_new(
@@ -176,6 +204,592 @@ def preview_video(project_root: Path, options: VideoRunOptions) -> VideoRunOutco
         plan.provider_call_count,
         0,
         "DRY_RUN_COMPLETE",
+    )
+
+
+def run_motion_smoke(
+    project_root: Path,
+    options: VideoRunOptions,
+    *,
+    model: str = "gen4_turbo",
+    duration_seconds: int = 5,
+    ratio: str = "1280:720",
+    provider: Any | None = None,
+    environ: Mapping[str, str] | None = None,
+) -> VideoRunOutcome:
+    """Preview or execute the independent one-result Runway motion smoke stage."""
+
+    if options.action != "motion_smoke":
+        raise ValueError("run_motion_smoke requires action=motion_smoke")
+    environment = os.environ if environ is None else environ
+    config = load_video_config(project_root, require_inputs=False)
+    keyframe = _keyframe(config, options.keyframe_id)
+    definition = config.providers.get("runway")
+    if definition is None or definition.responsibility != "motion":
+        raise VideoConfigError("Runway motion provider is not configured")
+    capabilities = definition.settings.get("supported_models") or {}
+    capability = capabilities.get(model) if isinstance(capabilities, Mapping) else None
+    if not isinstance(capability, Mapping):
+        raise VideoConfigError(f"unsupported Runway motion model: {model}")
+    if ratio not in {str(item) for item in capability.get("ratios", ())}:
+        raise VideoConfigError(f"unsupported Runway motion ratio: {ratio}")
+    if duration_seconds not in {int(item) for item in capability.get("durations", ())}:
+        raise VideoConfigError(f"unsupported Runway motion duration: {duration_seconds}")
+    variations = options.motion_variations if options.motion_variations is not None else 1
+    if not 1 <= variations <= config.limits.max_motion_variations_per_shot:
+        raise VideoConfigError(
+            f"motion variations must be within 1..{config.limits.max_motion_variations_per_shot}"
+        )
+    prompt = load_video_prompt(config.root, Path("prompts/home-broll-v1.txt"))
+    planned_requests = tuple(
+        PlannedRequest(
+            request_id=f"motion-smoke-pilot-v{index:03d}",
+            shot_id="motion_smoke",
+            variation=index,
+            responsibility="motion",
+            provider="runway",
+            model=model,
+            duration_seconds=float(duration_seconds),
+        )
+        for index in range(1, variations + 1)
+    )
+    plan = ShotPlan(
+        preset="motion_smoke",
+        mode="motion_smoke",
+        script_id="not_applicable",
+        aspect_ratio="16:9",
+        resolution=ratio,
+        frame_rate=30,
+        shots=(
+            PlannedShot(
+                shot_id="motion_smoke",
+                kind="motion",
+                source_role=keyframe.keyframe_id,
+                prompt=prompt,
+                duration_seconds=float(duration_seconds),
+                variation_count=variations,
+                selection_required=variations > 1,
+                requests=planned_requests,
+            ),
+        ),
+        final_edit_variations=0,
+        voice_request_count=0,
+    )
+    credits_per_second = float(capability.get("credits_per_second") or 0)
+    estimated_credits = credits_per_second * duration_seconds * variations or None
+    credit_usd = float(definition.settings.get("credit_usd") or 0.01)
+    estimated_usd = (
+        estimated_credits * credit_usd if estimated_credits is not None else None
+    )
+    budgets = _budget_limits(options)
+    if options.live:
+        if environment.get("VIDEO_ALLOW_LIVE_CALLS") != "true":
+            raise ExternalInputBlocked(
+                "live video calls require exact VIDEO_ALLOW_LIVE_CALLS=true"
+            )
+        if environment.get("VIDEO_MOTION_LIVE_SMOKE_TEST") != "true":
+            raise ExternalInputBlocked(
+                "first motion smoke requires exact VIDEO_MOTION_LIVE_SMOKE_TEST=true"
+            )
+        if not str(environment.get("RUNWAYML_API_SECRET") or "").strip():
+            raise ExternalInputBlocked(
+                "live provider credential is missing: RUNWAYML_API_SECRET"
+            )
+        if variations != 1 or model != "gen4_turbo" or duration_seconds != 5:
+            raise ExternalInputBlocked(
+                "the first live motion smoke must use one gen4_turbo result of exactly 5 seconds"
+            )
+        if budgets.max_runway_credits is None or budgets.max_runway_credits > 25:
+            raise ExternalInputBlocked(
+                "the first live motion smoke requires an explicit cap no greater than 25 Runway credits"
+            )
+        # This is deliberately before construction of the real SDK client.
+        check_estimate(
+            budgets,
+            provider="runway",
+            estimated_usd=estimated_usd,
+            estimated_credits=estimated_credits,
+            operation="motion smoke",
+        )
+        if provider is None:
+            from ..providers.runway_video import RunwayMotionProvider
+
+            provider = RunwayMotionProvider(
+                definition, api_key=str(environment["RUNWAYML_API_SECRET"])
+            )
+
+    storage = VideoRunStorage(
+        config.root,
+        secrets=tuple(
+            value
+            for key, value in environment.items()
+            if (key.endswith("_API_KEY") or key.endswith("_API_SECRET")) and value
+        ),
+    )
+    run = storage.create_run("motion-smoke")
+    request = MotionVideoRequest(
+        request_id=planned_requests[0].request_id,
+        run_id=run.run_id,
+        preset="motion_smoke",
+        shot_id="motion_smoke",
+        variation=1,
+        provider="runway",
+        model=model,
+        image_path=config.root / keyframe.path,
+        image_sha256=keyframe.sha256,
+        prompt_path=config.root / prompt.path,
+        prompt_text=prompt.text,
+        prompt_sha256=prompt.sha256,
+        ratio=ratio,
+        duration_seconds=duration_seconds,
+        seed=None,
+        output_format="mp4",
+        timeout_seconds=config.limits.provider_timeout_seconds,
+        max_retries=config.limits.max_retries,
+    )
+    budget_evidence = _budget_evidence(budgets, estimated_usd, estimated_credits)
+    base_request = {
+        "run_id": run.run_id,
+        "mode": "LIVE" if options.live else "DRY_RUN",
+        "action": "motion_smoke",
+        "preset": "motion_smoke",
+        "provider_call_count": variations,
+        "budget": budget_evidence,
+        "requests": [to_primitive(request)],
+    }
+    base_config = {
+        "preset": "motion_smoke",
+        "live": options.live,
+        "keyframe_id": keyframe.keyframe_id,
+        "model": model,
+        "duration_seconds": duration_seconds,
+        "ratio": ratio,
+        "variations": variations,
+        "budget": budget_evidence,
+        "providers_verified_on": config.verified_on,
+    }
+    if not options.live:
+        storage.append_event(
+            run,
+            "validated",
+            {"mode": "DRY_RUN", "provider_call_count": variations},
+        )
+        _write_motion_smoke_bundle(
+            config,
+            storage,
+            run,
+            request=base_request,
+            resolved=base_config,
+            plan=plan,
+            keyframe=keyframe,
+            status="DRY_RUN_COMPLETE",
+            results={
+                "status": "DRY_RUN",
+                "submission_count": 0,
+                "successful_outputs": 0,
+                "failed_outputs": 0,
+                "results": [],
+            },
+            candidates=(),
+            cost=_motion_smoke_cost(
+                config, model, duration_seconds, variations, estimated_credits, None
+            ),
+            edit_commands="",
+        )
+        storage.append_event(run, "dry_run_completed", {"submission_count": 0})
+        storage.assert_complete(run)
+        return VideoRunOutcome(
+            run.run_id, run.path, run, plan, variations, 0, "DRY_RUN_COMPLETE"
+        )
+
+    storage.append_event(
+        run,
+        "live_authorized",
+        {
+            "stage": "motion_smoke",
+            "provider": "runway",
+            "provider_call_count": 1,
+            "budget": budget_evidence,
+        },
+    )
+    execution: ExecutionRecord | None = None
+    try:
+        # Re-check immediately before the paid submission/upload boundary.
+        check_estimate(
+            budgets,
+            provider="runway",
+            estimated_usd=estimated_usd,
+            estimated_credits=estimated_credits,
+            operation="Runway submission",
+        )
+        execution = execute_provider_request(
+            request,
+            provider,
+            storage,
+            run,
+            config.root / "outputs/broll" / run.run_id,
+        )
+        if execution.status is not VideoTaskStatus.SUCCEEDED or len(execution.artifacts) != 1:
+            raise ExternalInputBlocked(
+                f"motion smoke provider task did not succeed: {execution.status.value}"
+            )
+        artifact = execution.artifacts[0]
+        try:
+            expected_width, expected_height = (int(value) for value in ratio.split(":", 1))
+        except (TypeError, ValueError) as exc:
+            raise VideoConfigError("motion smoke ratio is invalid") from exc
+        if artifact.width != expected_width or artifact.height != expected_height:
+            raise ExternalInputBlocked(
+                "motion smoke output resolution does not match the requested ratio"
+            )
+        if artifact.duration_seconds is None or abs(artifact.duration_seconds - duration_seconds) > 0.5:
+            raise ExternalInputBlocked(
+                "motion smoke output duration is outside the requested tolerance"
+            )
+        technical = generate_video_evidence(
+            artifact.path,
+            artifact.path.parent / "evidence",
+            prefix=artifact.path.stem,
+            timeout_seconds=min(config.limits.provider_timeout_seconds, 120),
+        )
+        for frame in technical["frames"].values():
+            frame["path"] = Path(frame["path"]).relative_to(config.root)
+        technical["contact_sheet"]["path"] = Path(
+            technical["contact_sheet"]["path"]
+        ).relative_to(config.root)
+        check_actual(
+            budgets,
+            provider="runway",
+            actual_usd=(
+                execution.actual_credits * credit_usd
+                if execution.actual_credits is not None
+                else None
+            ),
+            actual_credits=execution.actual_credits,
+            operation="motion smoke",
+        )
+    except Exception as exc:
+        _write_motion_smoke_bundle(
+            config,
+            storage,
+            run,
+            request=base_request,
+            resolved={**base_config, "failure_stage": "motion_smoke"},
+            plan=plan,
+            keyframe=keyframe,
+            status="FAILED",
+            results={
+                "status": "FAILED",
+                "submission_count": (
+                    1 if execution is not None and execution.provider_task_id else 0
+                ),
+                "submission_count_known": execution is not None,
+                "successful_outputs": 0,
+                "failed_outputs": 1,
+                "error_type": type(exc).__name__,
+                "error_message": str(exc),
+                "results": (
+                    [
+                        {
+                            "request_id": execution.request_id,
+                            "provider_task_id": execution.provider_task_id,
+                            "status": execution.status.value,
+                            "submission_attempts": execution.submission_attempts,
+                            "error_code": execution.error_code,
+                            "error_message": execution.error_message,
+                            "estimated_credits": execution.estimated_credits,
+                            "actual_credits": execution.actual_credits,
+                            "artifacts": [],
+                        }
+                    ]
+                    if execution is not None
+                    else []
+                ),
+            },
+            candidates=(),
+            cost=_motion_smoke_cost(
+                config, model, duration_seconds, variations, estimated_credits, None
+            ),
+            edit_commands="",
+        )
+        storage.append_event(
+            run,
+            "workflow_failed",
+            {"stage": "motion_smoke", "error_type": type(exc).__name__, "error": str(exc)},
+        )
+        storage.assert_complete(run)
+        raise
+    candidate = _artifact_evidence(artifact, config.root)
+    candidate["technical_evidence"] = technical
+    result_evidence = {
+        "request_id": request.request_id,
+        "provider_task_id": execution.provider_task_id,
+        "status": execution.status.value,
+        "submission_attempts": execution.submission_attempts,
+        "estimated_credits": execution.estimated_credits,
+        "actual_credits": execution.actual_credits,
+        "error_code": execution.error_code,
+        "error_message": execution.error_message,
+        "artifacts": [candidate],
+    }
+    edit_commands = "\n".join(
+        " ".join(str(item) for item in command) for command in technical["commands"]
+    ) + "\n"
+    _write_motion_smoke_bundle(
+        config,
+        storage,
+        run,
+        request=base_request,
+        resolved=base_config,
+        plan=plan,
+        keyframe=keyframe,
+        status="SUCCEEDED",
+        results={
+            "status": "SUCCEEDED",
+            "submission_count": 1,
+            "successful_outputs": 1,
+            "failed_outputs": 0,
+            "results": [result_evidence],
+        },
+        candidates=(candidate,),
+        cost=_motion_smoke_cost(
+            config,
+            model,
+            duration_seconds,
+            variations,
+            execution.estimated_credits or estimated_credits,
+            execution.actual_credits,
+        ),
+        edit_commands=edit_commands,
+    )
+    storage.append_event(
+        run,
+        "motion_smoke_completed",
+        {"status": "SUCCEEDED", "provider_task_id": execution.provider_task_id},
+    )
+    storage.assert_complete(run)
+    return VideoRunOutcome(run.run_id, run.path, run, plan, 1, 1, "SUCCEEDED")
+
+
+def _write_motion_smoke_bundle(
+    config: VideoProjectConfig,
+    storage: VideoRunStorage,
+    run: VideoRunContext,
+    *,
+    request: Mapping[str, Any],
+    resolved: Mapping[str, Any],
+    plan: ShotPlan,
+    keyframe: ApprovedKeyframe,
+    status: str,
+    results: Mapping[str, Any],
+    candidates: tuple[Mapping[str, Any], ...],
+    cost: Mapping[str, Any],
+    edit_commands: str,
+) -> None:
+    storage.write_json_new(run, "request.json", request)
+    storage.write_yaml_new(run, "resolved-config.yaml", resolved)
+    storage.write_bytes_new(run, "script.txt", b"")
+    storage.write_json_new(
+        run,
+        "script-hash.json",
+        {"status": "NOT_APPLICABLE", "reason": "independent motion smoke has no MTL script"},
+    )
+    storage.write_json_new(
+        run,
+        "audio-hash.json",
+        {"status": "NOT_APPLICABLE", "reason": "independent motion smoke has no voice/audio"},
+    )
+    storage.write_json_new(run, "keyframe-hash.json", _keyframe_evidence(keyframe, config))
+    storage.write_json_new(run, "shot-plan.json", to_primitive(plan))
+    storage.write_json_new(run, "provider-results.json", results)
+    storage.write_text_new(run, "edit-commands.txt", edit_commands)
+    storage.write_review_new(
+        run, blank_review_rows(run.run_id, "motion_smoke", candidates)
+    )
+    storage.write_json_new(run, "cost.json", cost)
+    storage.write_text_new(
+        run,
+        "summary.md",
+        summary_markdown(
+            run_id=run.run_id,
+            preset="motion_smoke",
+            status=status,
+            provider_call_count=int(request.get("provider_call_count") or 0),
+            output_count=len(candidates),
+            total_provider_cost=cost.get("total_provider_cost"),
+        ),
+    )
+
+
+def _motion_smoke_cost(
+    config: VideoProjectConfig,
+    model: str,
+    duration_seconds: int,
+    variations: int,
+    estimated_credits: float | None,
+    actual_credits: float | None,
+) -> dict[str, Any]:
+    credit_usd = float(config.providers["runway"].settings.get("credit_usd") or 0.01)
+    effective_credits = actual_credits if actual_credits is not None else estimated_credits
+    amount = effective_credits * credit_usd if effective_credits is not None else None
+    return {
+        "voice_cost": None,
+        "talking_video_cost": None,
+        "motion_video_cost": amount,
+        "editing_cost": 0,
+        "storage_cost": None,
+        "total_provider_cost": amount,
+        "currency": config.currency,
+        "components": [
+            {
+                "category": "motion",
+                "provider": "runway",
+                "model": model,
+                "generated_seconds": duration_seconds * variations,
+                "attempts": variations if actual_credits is not None else 0,
+                "successful_outputs": variations if actual_credits is not None else 0,
+                "failed_outputs": 0,
+                "amount": amount,
+                "basis": "actual" if actual_credits is not None else "estimated",
+                "currency": config.currency,
+                "estimated_credits": estimated_credits,
+                "actual_credits": actual_credits,
+                "pricing_source": config.providers["runway"].settings.get("pricing_source"),
+                "pricing_date": config.providers["runway"].settings.get(
+                    "pricing_verified_on"
+                ),
+            }
+        ],
+    }
+
+
+def _budget_limits(options: VideoRunOptions) -> BudgetLimits:
+    return BudgetLimits(
+        max_provider_cost_usd=options.max_provider_cost_usd,
+        max_runway_credits=options.max_runway_credits,
+        accept_unknown_provider_cost=options.accept_unknown_provider_cost,
+    )
+
+
+def _budget_evidence(
+    limits: BudgetLimits, estimated_usd: float | None, estimated_credits: float | None
+) -> dict[str, Any]:
+    return {
+        "max_provider_cost_usd": limits.max_provider_cost_usd,
+        "max_runway_credits": limits.max_runway_credits,
+        "accept_unknown_provider_cost": limits.accept_unknown_provider_cost,
+        "estimated_provider_cost_usd": estimated_usd,
+        "estimated_runway_credits": estimated_credits,
+    }
+
+
+def _estimate_talking_stage_usd(
+    config: VideoProjectConfig,
+    *,
+    provider_name: str,
+    talking_results: int,
+    duration_seconds: float,
+    include_voice: bool,
+) -> float | None:
+    provider = config.providers.get(provider_name)
+    if provider is None:
+        return None
+    price: float | None = None
+    pricing = provider.settings.get("pricing")
+    if isinstance(pricing, Mapping):
+        model = provider.settings.get("model")
+        record = pricing.get(model) if isinstance(pricing.get(model), Mapping) else None
+        if isinstance(record, Mapping) and record.get("usd_per_unit") is not None:
+            price = float(record["usd_per_unit"])
+    if price is None:
+        return None
+    amount = duration_seconds * talking_results * price
+    if include_voice:
+        voice = config.providers.get(str(config.voice_profile.provider or ""))
+        voice_pricing = voice.settings.get("pricing") if voice is not None else None
+        if not isinstance(voice_pricing, Mapping) or voice_pricing.get("usd_per_unit") is None:
+            return None
+        amount += duration_seconds * float(voice_pricing["usd_per_unit"])
+    return round(amount, 6)
+
+
+def _estimate_motion_credits(
+    config: VideoProjectConfig, plan: ShotPlan
+) -> float | None:
+    total = 0.0
+    found = False
+    for shot in plan.shots:
+        for request in shot.requests:
+            if request.responsibility != "motion":
+                continue
+            provider = config.providers.get(request.provider)
+            models = provider.settings.get("supported_models") if provider else None
+            capability = models.get(request.model) if isinstance(models, Mapping) else None
+            if not isinstance(capability, Mapping) or capability.get("credits_per_second") is None:
+                return None
+            if request.duration_seconds is None:
+                return None
+            total += float(capability["credits_per_second"]) * float(
+                request.duration_seconds
+            )
+            found = True
+    return total if found else None
+
+
+def _resolve_calibrated_smoke_audio(
+    config: VideoProjectConfig,
+    script: ScriptRecord,
+    *,
+    run_id: str,
+    provider: Any,
+    budget_limits: BudgetLimits,
+    estimated_stage_usd: float | None,
+    enforce_budget: bool,
+    attempts: list[dict[str, Any]],
+) -> ApprovedAudio:
+    """Synthesize at most three exact-script candidates without rewriting the script."""
+
+    speeds = (0.9, 1.0, 1.1)
+    for index, speed in enumerate(speeds, start=1):
+        if enforce_budget:
+            check_estimate(
+                budget_limits,
+                provider="heygen",
+                estimated_usd=estimated_stage_usd,
+                operation=f"HeyGen speech submission {index}",
+            )
+        audio = resolve_or_synthesize_audio(
+            config,
+            script,
+            run_id=run_id,
+            provider=provider,
+            speed_override=speed,
+        )
+        record = {
+            "attempt": index,
+            "speed": speed,
+            "provider_request_id": audio.provider_task_id,
+            "path": audio.path,
+            "sha256": audio.sha256,
+            "duration_seconds": audio.duration_seconds,
+            "within_smoke_range": 8 <= audio.duration_seconds <= 12,
+        }
+        attempts.append(record)
+        if record["within_smoke_range"]:
+            return audio
+        # Preserve every paid result as derived evidence while freeing the
+        # canonical per-run output name for the next bounded calibration call.
+        current = config.root / audio.path
+        calibrated = current.with_name(
+            f"{current.stem}-speed-{str(speed).replace('.', 'p')}{current.suffix}"
+        )
+        if calibrated.exists():
+            raise VideoConfigError(f"voice calibration output already exists: {calibrated}")
+        os.replace(current, calibrated)
+        record["path"] = calibrated.relative_to(config.root)
+    raise ExternalInputBlocked(
+        "Tooltip speech remained outside 8..12 seconds after bounded speeds 0.9, 1.0, and 1.1; "
+        "manual audio selection is required"
     )
 
 
@@ -229,13 +843,13 @@ def run_talking_smoke(
         validate_live_smoke_guards(provider_name, 1, None, environment)
     else:
         validate_live_provider_guard(provider_name, environment)
+    voice_provider_needed = False
     if plan.voice_request_count:
         voice_name = str(config.voice_profile.provider or "")
         credential = _credential_name(voice_name)
         if not str(environment.get(credential) or "").strip():
             raise ExternalInputBlocked(f"live provider credential is missing: {credential}")
-        if voice_provider is None:
-            voice_provider = _create_voice_provider(config, voice_name, environment)
+        voice_provider_needed = voice_provider is None
         if options.audio_override is not None:
             raise VideoConfigError("audio override is unavailable when voice synthesis is required")
         audio: ApprovedAudio | None = None
@@ -244,6 +858,25 @@ def run_talking_smoke(
         _validate_talking_validation_audio(
             provider_name, audio.duration_seconds, environment, first_live_smoke
         )
+    estimated_talking_usd = _estimate_talking_stage_usd(
+        config,
+        provider_name=provider_name,
+        talking_results=len(plan.shots[0].requests),
+        duration_seconds=(audio.duration_seconds if audio is not None else 12.0),
+        include_voice=bool(plan.voice_request_count),
+    )
+    budget_limits = _budget_limits(options)
+    if provider is None or voice_provider_needed:
+        # Enforce before construction of either real provider client.
+        check_estimate(
+            budget_limits,
+            provider=provider_name,
+            estimated_usd=estimated_talking_usd,
+            operation="talking smoke provider construction",
+        )
+    real_talking_provider = provider is None
+    if voice_provider_needed:
+        voice_provider = _create_voice_provider(config, voice_name, environment)
     if provider is None:
         provider = _create_talking_provider(config, provider_name, environment)
     secrets = tuple(
@@ -263,17 +896,31 @@ def run_talking_smoke(
             "talking_result_limit": len(plan.shots[0].requests),
             "provider_call_count": plan.provider_call_count,
             "provider": provider_name,
+            "budget": _budget_evidence(
+                budget_limits, estimated_talking_usd, None
+            ),
         },
     )
     voice_called = 0
+    voice_calibration_attempts: list[dict[str, Any]] = []
     requests: list[TalkingVideoRequest] = []
     executions: list[ExecutionRecord] = []
     try:
         if plan.voice_request_count:
-            voice_called = 1
-            audio = resolve_or_synthesize_audio(
-                config, script, run_id=run.run_id, provider=voice_provider
+            audio = _resolve_calibrated_smoke_audio(
+                config,
+                script,
+                run_id=run.run_id,
+                provider=voice_provider,
+                budget_limits=budget_limits,
+                estimated_stage_usd=estimated_talking_usd,
+                enforce_budget=(
+                    options.max_provider_cost_usd is not None
+                    or options.accept_unknown_provider_cost
+                ),
+                attempts=voice_calibration_attempts,
             )
+            voice_called = len(voice_calibration_attempts)
             storage.append_event(
                 run,
                 "voice_synthesized",
@@ -281,6 +928,7 @@ def run_talking_smoke(
                     "provider": config.voice_profile.provider,
                     "model": config.voice_profile.model,
                     "audio_sha256": audio.sha256,
+                    "calibration_attempts": voice_calibration_attempts,
                 },
             )
             _validate_talking_validation_audio(
@@ -323,6 +971,16 @@ def run_talking_smoke(
             )
             requests.append(request)
             try:
+                if provider is not None and (
+                    options.max_provider_cost_usd is not None
+                    or options.accept_unknown_provider_cost
+                ):
+                    check_estimate(
+                        budget_limits,
+                        provider=provider_name,
+                        estimated_usd=estimated_talking_usd,
+                        operation="HeyGen talking submission",
+                    )
                 execution = execute_provider_request(
                     request, provider, storage, run, output_dir
                 )
@@ -347,9 +1005,13 @@ def run_talking_smoke(
                 )
                 break
             executions.append(execution)
+            if real_talking_provider and execution.status is VideoTaskStatus.SUCCEEDED:
+                for artifact in execution.artifacts:
+                    _validate_talking_media_output(artifact, preset.resolution, audio.duration_seconds)
             if execution.status is not VideoTaskStatus.SUCCEEDED:
                 break
     except Exception as exc:
+        voice_called = max(voice_called, len(voice_calibration_attempts))
         failed_requests: list[dict[str, Any]] = []
         if plan.voice_request_count:
             failed_requests.append(_planned_voice_evidence(config, script, run.run_id))
@@ -462,6 +1124,10 @@ def run_talking_smoke(
             "action": "talking_smoke",
             "preset": options.preset,
             "provider_call_count": plan.provider_call_count,
+            "budget": _budget_evidence(
+                budget_limits, estimated_talking_usd, None
+            ),
+            "voice_calibration_attempts": voice_calibration_attempts,
             "requests": request_evidence,
             **prior_context,
         },
@@ -474,6 +1140,9 @@ def run_talking_smoke(
             "live": True,
             "talking_result_limit": len(plan.shots[0].requests),
             "first_live_smoke": first_live_smoke,
+            "budget": _budget_evidence(
+                budget_limits, estimated_talking_usd, None
+            ),
             **prior_context,
         },
     )
@@ -561,9 +1230,64 @@ def generate_video(
         raise ExternalInputBlocked("passing smoke run used a different approved keyframe digest")
     if smoke_request.get("provider") != preset.talking_provider:
         raise ExternalInputBlocked("passing smoke run used a different talking provider")
+    motion_smoke_review_evidence: dict[str, str] | None = None
+    if providers is None:
+        motion_smoke_review_evidence = _validate_passing_motion_smoke(
+            config.root,
+            options.motion_smoke_run_id,
+            options.motion_smoke_review_file,
+            keyframe_sha256=keyframe.sha256,
+        )
     _validate_full_live_guards(config, plan, environment)
 
+    if (
+        providers is None
+        and options.preset in {"product_page", "homepage"}
+        and "talking_medium_closeup" not in keyframe.roles
+    ):
+        raise ExternalInputBlocked(
+            f"{options.preset} live generation requires an approved talking_medium_closeup "
+            "keyframe role; derive-talking-crop creates only an unapproved candidate"
+        )
+
+    budget_limits = _budget_limits(options)
+    estimated_motion_credits = _estimate_motion_credits(config, plan)
+    talking_requests = sum(
+        len(shot.requests) for shot in plan.shots if shot.kind == "talking"
+    )
+    estimated_talking_usd = _estimate_talking_stage_usd(
+        config,
+        provider_name=preset.talking_provider,
+        talking_results=talking_requests,
+        duration_seconds=12.0,
+        include_voice=bool(plan.voice_request_count),
+    )
+    if providers is None:
+        if environment.get("VIDEO_FULL_PILOT_LIVE") != "true":
+            raise ExternalInputBlocked(
+                "full live pilot requires exact VIDEO_FULL_PILOT_LIVE=true"
+            )
+        if talking_requests or plan.voice_request_count:
+            check_estimate(
+                budget_limits,
+                provider=preset.talking_provider,
+                estimated_usd=estimated_talking_usd,
+                operation="pilot provider construction",
+            )
+        if estimated_motion_credits is not None:
+            check_estimate(
+                budget_limits,
+                provider="runway",
+                estimated_usd=(
+                    estimated_motion_credits
+                    * float(config.providers["runway"].settings.get("credit_usd") or 0.01)
+                ),
+                estimated_credits=estimated_motion_credits,
+                operation="pilot Runway provider construction",
+            )
+
     selected_providers = dict(providers or {})
+    real_generation_providers = providers is None
     if providers is None:
         selected_providers = _create_generation_providers(config, plan, environment)
     secret_values = tuple(
@@ -581,6 +1305,13 @@ def generate_video(
     voice_call_count = plan.voice_request_count
     audio: ApprovedAudio | None = None
     try:
+        if providers is None and plan.voice_request_count:
+            check_estimate(
+                budget_limits,
+                provider=preset.talking_provider,
+                estimated_usd=estimated_talking_usd,
+                operation="HeyGen speech submission",
+            )
         audio = resolve_or_synthesize_audio(
             config, script, run_id=run.run_id, provider=voice_provider
         )
@@ -626,8 +1357,13 @@ def generate_video(
             "stage": "pilot_shot_generation",
             "smoke_run_id": options.smoke_run_id,
             "smoke_review": smoke_review_evidence,
+            "motion_smoke_run_id": options.motion_smoke_run_id,
+            "motion_smoke_review": motion_smoke_review_evidence,
             "provider_call_count": plan.provider_call_count,
             "concurrency": 1,
+            "budget": _budget_evidence(
+                budget_limits, estimated_talking_usd, estimated_motion_credits
+            ),
         },
     )
 
@@ -649,6 +1385,30 @@ def generate_video(
             requests.append(request)
             request_responsibilities[request.request_id] = planned.responsibility
             try:
+                if providers is None:
+                    if planned.responsibility == "motion":
+                        check_estimate(
+                            budget_limits,
+                            provider="runway",
+                            estimated_usd=(
+                                estimated_motion_credits
+                                * float(
+                                    config.providers["runway"].settings.get("credit_usd")
+                                    or 0.01
+                                )
+                                if estimated_motion_credits is not None
+                                else None
+                            ),
+                            estimated_credits=estimated_motion_credits,
+                            operation="Runway submission",
+                        )
+                    else:
+                        check_estimate(
+                            budget_limits,
+                            provider=preset.talking_provider,
+                            estimated_usd=estimated_talking_usd,
+                            operation="HeyGen video submission",
+                        )
                 provider = selected_providers.get(request.provider)
                 if provider is None:
                     raise VideoConfigError(
@@ -671,6 +1431,12 @@ def generate_video(
                     str(exc),
                 )
             executions.append(execution)
+            if real_generation_providers and execution.status is VideoTaskStatus.SUCCEEDED:
+                for artifact in execution.artifacts:
+                    if planned.responsibility == "talking":
+                        _validate_talking_media_output(
+                            artifact, preset.resolution, audio.duration_seconds
+                        )
 
     artifacts = tuple(artifact for record in executions for artifact in record.artifacts)
     successful_requests = sum(
@@ -742,7 +1508,12 @@ def generate_video(
             "preset": options.preset,
             "smoke_run_id": options.smoke_run_id,
             "smoke_review": smoke_review_evidence,
+            "motion_smoke_run_id": options.motion_smoke_run_id,
+            "motion_smoke_review": motion_smoke_review_evidence,
             "provider_call_count": plan.provider_call_count,
+            "budget": _budget_evidence(
+                budget_limits, estimated_talking_usd, estimated_motion_credits
+            ),
             "requests": request_evidence,
         },
     )
@@ -754,6 +1525,9 @@ def generate_video(
             "live": True,
             "smoke_run_id": options.smoke_run_id,
             "smoke_review": smoke_review_evidence,
+            "budget": _budget_evidence(
+                budget_limits, estimated_talking_usd, estimated_motion_credits
+            ),
         },
     )
     storage.write_bytes_new(run, "script.txt", script.content)
@@ -907,6 +1681,59 @@ def _write_failure_bundle(
 def handle_video_command(args: Any) -> tuple[int, Any]:
     if args.video_command == "validate":
         return 0, validate_video_project(args.project_root)
+    if args.video_command == "voice":
+        if args.voice_command == "verify":
+            from .voice_verification import verify_owner_voice
+
+            return 0, verify_owner_voice(
+                args.project_root,
+                voice_id=getattr(args, "voice_id", None),
+                voice_id_env=getattr(args, "voice_id_env", None),
+            )
+        if args.voice_command == "download-preview":
+            from .voice_verification import download_owner_voice_preview
+
+            return 0, download_owner_voice_preview(
+                args.project_root,
+                voice_id=args.voice_id,
+            )
+        if args.voice_command == "init-env":
+            from ..env import migrate_legacy_voice_env
+
+            return 0, migrate_legacy_voice_env(args.project_root)
+        raise ValueError(f"voice command is not implemented: {args.voice_command}")
+    if args.video_command == "keyframe":
+        if args.keyframe_command == "derive-talking-crop":
+            from .keyframes import derive_talking_crop
+
+            return 0, derive_talking_crop(args.project_root, args.source)
+        raise ValueError(f"keyframe command is not implemented: {args.keyframe_command}")
+    if args.video_command == "motion-smoke-test":
+        options = VideoRunOptions(
+            preset="motion_smoke",
+            action="motion_smoke",
+            motion_variations=args.variations,
+            keyframe_id=args.keyframe,
+            live=bool(args.live),
+            provider_name="runway",
+            max_provider_cost_usd=args.max_provider_cost_usd,
+            max_runway_credits=args.max_runway_credits,
+            accept_unknown_provider_cost=bool(args.accept_unknown_provider_cost),
+        )
+        outcome = run_motion_smoke(
+            args.project_root,
+            options,
+            model=args.model,
+            duration_seconds=args.duration,
+            ratio=args.ratio,
+        )
+        return (0 if outcome.status in {"DRY_RUN_COMPLETE", "SUCCEEDED"} else 3), {
+            "run_id": outcome.run_id,
+            "run_dir": str(outcome.run_dir),
+            "status": outcome.status,
+            "planned_provider_calls": outcome.provider_call_count,
+            "paid_calls": outcome.submission_count,
+        }
     if args.video_command in {"talking-smoke-test", "generate"}:
         options = VideoRunOptions(
             preset=args.preset,
@@ -927,7 +1754,18 @@ def handle_video_command(args: Any) -> tuple[int, Any]:
                 if getattr(args, "smoke_review_file", None)
                 else None
             ),
+            motion_smoke_run_id=getattr(args, "motion_smoke_run_id", None),
+            motion_smoke_review_file=(
+                Path(args.motion_smoke_review_file)
+                if getattr(args, "motion_smoke_review_file", None)
+                else None
+            ),
             provider_name=getattr(args, "provider", None),
+            max_provider_cost_usd=getattr(args, "max_provider_cost_usd", None),
+            max_runway_credits=getattr(args, "max_runway_credits", None),
+            accept_unknown_provider_cost=bool(
+                getattr(args, "accept_unknown_provider_cost", False)
+            ),
         )
         if args.live and args.video_command == "talking-smoke-test":
             outcome = run_talking_smoke(args.project_root, options)
@@ -1219,6 +2057,71 @@ def _validate_passing_smoke(
     return request, review_evidence
 
 
+def _validate_passing_motion_smoke(
+    project_root: Path,
+    run_id: str | None,
+    review_file: Path | None,
+    *,
+    keyframe_sha256: str,
+) -> dict[str, str]:
+    if not run_id or "/" in run_id or "\\" in run_id:
+        raise ExternalInputBlocked(
+            "complete generation requires a human-reviewed motion smoke run"
+        )
+    run_dir = (project_root / "runs" / run_id).resolve()
+    runs_root = (project_root / "runs").resolve()
+    if runs_root not in run_dir.parents or not run_dir.is_dir():
+        raise ExternalInputBlocked(f"motion smoke run does not exist: {run_id}")
+    try:
+        request = json.loads((run_dir / "request.json").read_text(encoding="utf-8"))
+        results = json.loads((run_dir / "provider-results.json").read_text(encoding="utf-8"))
+        keyframe = json.loads((run_dir / "keyframe-hash.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ExternalInputBlocked(f"motion smoke evidence is incomplete: {run_id}") from exc
+    if request.get("action") != "motion_smoke" or results.get("status") != "SUCCEEDED":
+        raise ExternalInputBlocked("motion smoke is not a successful one-result run")
+    if keyframe.get("sha256") != keyframe_sha256:
+        raise ExternalInputBlocked("motion smoke used a different approved keyframe digest")
+    result_items = results.get("results") or []
+    artifacts = result_items[0].get("artifacts") if len(result_items) == 1 else []
+    if len(artifacts or []) != 1:
+        raise ExternalInputBlocked("motion smoke output provenance is missing")
+    artifact = artifacts[0]
+    candidate = str(artifact.get("candidate") or artifact.get("artifact_id") or "")
+    if not candidate or not artifact.get("provider_task_id"):
+        raise ExternalInputBlocked("motion smoke task/output identity is missing")
+    source_path = (project_root / str(artifact.get("path") or "")).resolve()
+    outputs_root = (project_root / "outputs/broll").resolve()
+    if outputs_root not in source_path.parents or not source_path.is_file():
+        raise ExternalInputBlocked("motion smoke output is missing or outside broll outputs")
+    if sha256_file(source_path) != artifact.get("sha256"):
+        raise ExternalInputBlocked("motion smoke output hash no longer matches evidence")
+    if review_file is None:
+        raise ExternalInputBlocked(
+            "complete generation requires --motion-smoke-review-file under outputs/reviews"
+        )
+    try:
+        row, review_evidence = load_external_review_row(
+            project_root, run_dir, candidate, review_file, require_ready=False
+        )
+    except ReviewError as exc:
+        raise ExternalInputBlocked(str(exc)) from exc
+    required_passes = QA_FIELDS[4:18]
+    if any(not _truthy(row.get(field)) for field in required_passes):
+        raise ExternalInputBlocked("motion smoke review has incomplete or failing QA decisions")
+    if not str(row.get("reviewer") or "").strip():
+        raise ExternalInputBlocked("motion smoke reviewer is required")
+    try:
+        reviewed_at = datetime.fromisoformat(
+            str(row.get("reviewed_at") or "").replace("Z", "+00:00")
+        )
+    except ValueError as exc:
+        raise ExternalInputBlocked("motion smoke reviewed_at is invalid") from exc
+    if reviewed_at.tzinfo is None:
+        raise ExternalInputBlocked("motion smoke reviewed_at must include a timezone")
+    return review_evidence
+
+
 def _first_talking_request(request_evidence: Mapping[str, Any]) -> dict[str, Any]:
     for item in request_evidence.get("requests") or []:
         if isinstance(item, dict) and item.get("keyframe_sha256"):
@@ -1387,7 +2290,33 @@ def _artifact_evidence(artifact: Any, project_root: Path) -> dict[str, Any]:
         "width": artifact.width,
         "height": artifact.height,
         "provider_task_id": artifact.provider_task_id,
+        "source_url_redacted": artifact.source_url_redacted,
+        "container": artifact.container,
+        "video_codec": artifact.video_codec,
+        "pixel_format": artifact.pixel_format,
+        "average_frame_rate": artifact.average_frame_rate,
+        "audio_stream_present": artifact.audio_stream_present,
+        "audio_codec": artifact.audio_codec,
+        "sample_rate": artifact.sample_rate,
+        "channel_count": artifact.channel_count,
+        "bit_rate": artifact.bit_rate,
+        "provenance": artifact.provenance,
     }
+
+
+def _validate_talking_media_output(
+    artifact: Any, resolution: str, expected_duration: float
+) -> None:
+    try:
+        width, height = (int(value) for value in resolution.split(":", 1))
+    except (TypeError, ValueError) as exc:
+        raise VideoConfigError("talking output resolution is invalid") from exc
+    if artifact.width != width or artifact.height != height:
+        raise ExternalInputBlocked("talking output resolution does not match the requested format")
+    if not artifact.audio_stream_present:
+        raise ExternalInputBlocked("talking output has no audio stream")
+    if artifact.duration_seconds is None or abs(artifact.duration_seconds - expected_duration) > 0.75:
+        raise ExternalInputBlocked("talking output duration does not match the approved audio")
 
 
 def _apply_execution_cost_facts(
@@ -1409,6 +2338,12 @@ def _apply_execution_cost_facts(
             for record in matching
             if record.status is not VideoTaskStatus.SUCCEEDED or not record.artifacts
         )
+        component["estimated_credits"] = sum(
+            record.estimated_credits or 0 for record in matching
+        ) if any(record.estimated_credits is not None for record in matching) else None
+        component["actual_credits"] = sum(
+            record.actual_credits or 0 for record in matching
+        ) if any(record.actual_credits is not None for record in matching) else None
 
 
 def _truthy(value: Any) -> bool:

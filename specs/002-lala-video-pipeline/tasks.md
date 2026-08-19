@@ -190,6 +190,49 @@
 
 ---
 
+## Phase 12: Production-Readiness Remediation
+
+### Setup and specification traceability
+
+- [X] T085 Update Goal 2 requirements, plan, official API research, data model, provider/CLI/config/run contracts, and quickstart for FR-039–FR-050 in `specs/002-lala-video-pipeline/`
+- [X] T086 Add `python-dotenv`, GitHub Actions, ignored graphics directories, and brand configuration scaffolding in `pyproject.toml`, `.github/workflows/ci.yml`, `.gitignore`, `configs/brand-assets.yaml`, `assets/brand/`, and `outputs/graphics/`
+
+### User Story 6 — Safe environment and verified owner voice
+
+- [X] T087 [P] [US6] Add absent/present/process-precedence/test-isolation/secret-redaction tests in `tests/test_env_loading.py`
+- [X] T088 [P] [US6] Add capturing-transport voice detail/list/preview safety, mismatch, and staged-profile tests in `tests/test_heygen_voice_verification.py`
+- [X] T089 [US6] Implement safe project-root environment loading and lowercase-variable migration in `src/lala_workflow/env.py`
+- [X] T090 [US6] Implement read-only voice verification and optional preview download evidence in `src/lala_workflow/providers/heygen_voice.py` and `src/lala_workflow/video/voice_verification.py`
+- [X] T091 [US6] Extend staged voice-profile validation and configure the owner-supplied voice as verification-gated in `src/lala_workflow/video/domain.py`, `src/lala_workflow/video/config.py`, and `configs/voice-profile.yaml`
+- [X] T092 [US6] Wire `video voice verify`, `video voice download-preview`, and explicit legacy migration in `src/lala_workflow/video/cli.py` and `src/lala_workflow/video/runner.py`
+
+### User Story 7 — Correct provider contracts and independent motion smoke
+
+- [X] T093 [P] [US7] Replace low-fidelity HeyGen contract fakes with HTTPX capturing transport coverage for multipart, idempotency, capabilities, failures, retry-after, 409, and asset reuse in `tests/test_heygen_talking_contract.py`
+- [X] T094 [P] [US7] Add Runway signature, prompt, final-credit, motion-smoke independence, budget, media evidence, and failure coverage in `tests/test_runway_motion_contract.py` and `tests/test_video_motion_smoke.py`
+- [X] T095 [US7] Repair HeyGen multipart upload, content-aware idempotency, request-in-progress handling, current failures, capability translation, and run-local asset cache in `src/lala_workflow/providers/heygen_talking.py`
+- [X] T096 [US7] Add single-submit fail-closed Starfish evidence, bounded 0.9/1.0/1.1 duration calibration, and current pricing in `src/lala_workflow/providers/heygen_voice.py`, `src/lala_workflow/video/voice.py`, `src/lala_workflow/video/costing.py`, and `configs/providers.yaml`
+- [X] T097 [US7] Correct Runway prompt/image bounds and terminal actual credits in `src/lala_workflow/providers/runway_video.py` and `configs/providers.yaml`
+- [X] T098 [US7] Implement shared pre-construction USD/credit budget policy in `src/lala_workflow/video/budget.py`, domain options, and all live entry points
+- [X] T099 [US7] Implement independent dry/live `motion-smoke-test` planning, execution, evidence, outputs, and exact live gates in `src/lala_workflow/video/runner.py` and `src/lala_workflow/video/cli.py`
+- [X] T100 [US7] Expand FFprobe metadata and implement non-overwriting first/middle/last frames plus contact sheet in `src/lala_workflow/video/downloads.py` and `src/lala_workflow/editing/ffmpeg.py`
+
+### User Story 8 — Concrete local graphics and tooltip assembly
+
+- [X] T101 [P] [US8] Add deterministic draft/approved graphic, actual overlay, draft-status, and promotion-block tests in `tests/test_video_graphics.py` and `tests/test_video_assemble.py`
+- [X] T102 [P] [US8] Add talking-crop provenance and source-immutability tests in `tests/test_video_keyframe_crop.py`
+- [X] T103 [US8] Implement approved/draft brand asset loading and deterministic exact-copy graphics outside approved directories in `src/lala_workflow/video/graphics.py`
+- [X] T104 [US8] Extend FFmpeg assembly to overlay/fade real graphics and record their hashes/commands in `src/lala_workflow/editing/ffmpeg.py` and `src/lala_workflow/video/assembly.py`
+- [X] T105 [US8] Block draft-dependent promotion and preserve approved brand provenance in `src/lala_workflow/video/promotion.py`
+- [X] T106 [US8] Implement deterministic talking-crop candidate generation and keyframe roles in `src/lala_workflow/video/keyframes.py`, `src/lala_workflow/video/cli.py`, and `configs/keyframe-manifest.yaml`
+- [X] T107 [US8] Update the exact blank QA schema and technical/audio/identity fields in `src/lala_workflow/video/storage.py`, review/report logic, and tests
+
+### Verification and handoff
+
+- [X] T108 Update README, contracts, quickstart, configuration examples, status semantics, and append-only progress evidence in `README.md`, `.env.example`, `specs/002-lala-video-pipeline/contracts/`, `specs/002-lala-video-pipeline/quickstart.md`, and `PROGRESS.md`
+- [X] T109 Run focused and full offline tests, compilation, Goal 1 10/5/5 dry runs, Goal 2 validation and smoke previews, FFmpeg/media evidence, source-hash comparisons, secret scans, CI audit, and `git diff --check`; record run IDs and paid-call count
+- [X] T110 Reconcile FR-001–FR-050 and SC-001–SC-026 against authoritative evidence, append any remaining tasks, and report live stages truthfully without enabling missing flags
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -287,6 +330,10 @@ T058 tests/test_video_promotion.py -> T061 src/lala_workflow/video/promotion.py
 | Secrets, tests, documentation (FR-033–FR-035) | T014–T017, T065–T071, T078 |
 | Owner package, legacy keyframe, canonical voice sources (FR-036–FR-038) | T079–T084 |
 | Measurable success criteria (SC-001–SC-016) | T027, T037, T047, T055, T064, T068–T071, T082–T084 |
+| Safe environment, voice verification/preview, staged profile (FR-039–FR-040, FR-049) | T087–T092 |
+| HeyGen/Runway contracts, motion smoke, budgets, media evidence (FR-041–FR-044, FR-050) | T093–T100 |
+| Local graphics, keyframe roles/crop, tooltip E2E, CI (FR-045–FR-048) | T101–T109 |
+| Production-readiness measurable outcomes (SC-017–SC-026) | T087–T110 |
 
 ---
 

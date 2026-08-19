@@ -38,6 +38,7 @@ class FFmpegEditor:
         resolution: str,
         frame_rate: int,
         transition_seconds: float,
+        graphic_paths: Sequence[Path] = (),
     ) -> list[str]:
         if output_path.exists():
             raise FFmpegError(f"output already exists and will not be overwritten: {output_path}")
@@ -54,6 +55,9 @@ class FFmpegEditor:
             command.extend(["-stream_loop", "-1", "-i", str(path)])
         audio_input = len(broll_paths) + 1
         command.extend(["-i", str(audio_path)])
+        graphic_input = audio_input + 1
+        for path in graphic_paths:
+            command.extend(["-loop", "1", "-i", str(path)])
         normalize = (
             f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
             f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,"
@@ -107,12 +111,30 @@ class FFmpegEditor:
                     )
                     cumulative += durations[index] - transition_seconds
                     previous = output
+        output_label = "vout"
+        for index, _path in enumerate(graphic_paths):
+            input_index = graphic_input + index
+            graphic_label = f"graphic{index}"
+            next_label = f"vgraphic{index}"
+            fade_out_start = max(0.0, audio_duration_seconds - 0.25)
+            filters.append(
+                f"[{input_index}:v]scale='min(480,iw)':-1,format=rgba,"
+                f"fade=t=in:st=0:d=0.25:alpha=1,"
+                f"fade=t=out:st={fade_out_start:.6f}:d=0.25:alpha=1"
+                f"[{graphic_label}]"
+            )
+            filters.append(
+                f"[{output_label}][{graphic_label}]overlay=(W-w)/2:H-h-40:"
+                f"enable='between(t,0,{audio_duration_seconds:.6f})':shortest=0"
+                f"[{next_label}]"
+            )
+            output_label = next_label
         command.extend(
             [
                 "-filter_complex",
                 ";".join(filters),
                 "-map",
-                "[vout]",
+                f"[{output_label}]",
                 "-map",
                 f"{audio_input}:a:0",
                 "-af",
@@ -169,6 +191,7 @@ class FFmpegEditor:
         transition_seconds: float,
         timeout_seconds: float,
         artifact_id: str,
+        graphic_paths: Sequence[Path] = (),
     ) -> tuple[MediaArtifact, str]:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         command = self.build_assembly_command(
@@ -180,6 +203,7 @@ class FFmpegEditor:
             resolution=resolution,
             frame_rate=frame_rate,
             transition_seconds=transition_seconds,
+            graphic_paths=graphic_paths,
         )
         self.run(command, timeout_seconds=timeout_seconds)
         info = inspect_video(output_path, timeout_seconds=min(timeout_seconds, 30))
@@ -193,6 +217,15 @@ class FFmpegEditor:
             duration_seconds=info.duration_seconds,
             width=info.width,
             height=info.height,
+            container=info.container,
+            video_codec=info.video_codec,
+            pixel_format=info.pixel_format,
+            average_frame_rate=info.average_frame_rate,
+            audio_stream_present=info.audio_stream_present,
+            audio_codec=info.audio_codec,
+            sample_rate=info.sample_rate,
+            channel_count=info.channel_count,
+            bit_rate=info.bit_rate,
         )
         return artifact, self.format_command(command)
 

@@ -1,0 +1,32 @@
+name: offline-ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      LALA_DISABLE_DOTENV: "true"
+      VIDEO_ALLOW_LIVE_CALLS: "false"
+      VIDEO_LIVE_SMOKE_TEST: "false"
+      VIDEO_MOTION_LIVE_SMOKE_TEST: "false"
+      VIDEO_FULL_PILOT_LIVE: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.11"
+          enable-cache: true
+      - name: Install FFmpeg and FFprobe
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install dependencies
+        run: uv sync --extra dev --frozen
+      - name: Compile
+        run: uv run python -m compileall -q src tests
+      - name: Test offline
+        run: uv run pytest -q

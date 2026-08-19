@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import shutil
 import time
 from pathlib import Path
 
@@ -47,12 +48,12 @@ def test_run_artifacts_refuse_rewrite(video_project_root: Path) -> None:
         storage.write_json_new(outcome.context, "cost.json", {})
 
 
-def test_missing_production_inputs_create_no_run() -> None:
+def test_verified_owner_voice_allows_production_preview_without_provider_calls() -> None:
     root = Path(__file__).resolve().parents[1]
-    before = set((root / "runs").iterdir())
-    with pytest.raises(ExternalInputBlocked):
-        preview_video(root, VideoRunOptions(preset="tooltip", action="generate"))
-    assert set((root / "runs").iterdir()) == before
+    outcome = preview_video(root, VideoRunOptions(preset="tooltip", action="generate"))
+    assert outcome.submission_count == 0
+    assert outcome.status == "DRY_RUN_COMPLETE"
+    shutil.rmtree(outcome.run_dir)
 
 
 def test_video_cli_validate_and_preview_exit_contract(
@@ -80,12 +81,12 @@ def test_video_cli_validate_and_preview_exit_contract(
     assert '"planned_provider_calls": 3' in output
 
 
-def test_video_cli_missing_inputs_returns_external_blocker(
+def test_video_cli_verified_voice_returns_valid(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     root = Path(__file__).resolve().parents[1]
-    assert main(["video", "validate", "--project-root", str(root)]) == 4
-    assert "BLOCKED_EXTERNAL:" in capsys.readouterr().err
+    assert main(["video", "validate", "--project-root", str(root)]) == 0
+    assert '"status": "valid"' in capsys.readouterr().out
 
 
 def test_all_three_preview_plans_complete_within_sixty_seconds(

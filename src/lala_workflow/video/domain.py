@@ -24,6 +24,7 @@ class ApprovedKeyframe:
     source_package_sha256: str | None = None
     source_path: str | None = None
     owner_approval_reference: str | None = None
+    roles: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +79,18 @@ class VoiceProfile:
     output_format: str
     sample_rate: int | None
     approval_status: str
+    gender: str | None = None
+    locale: str | None = None
+    engine: str | None = None
+    voice_type: str | None = None
+    created_at: str | None = None
+    voice_name: str | None = None
+    owner_supplied_voice_id: bool = False
+    verification_run_id: str | None = None
+    verification_time: str | None = None
+    profile_version: str | None = None
+    approval_scope: str | None = None
+    owner_reference: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -276,6 +289,7 @@ class VideoTaskResult:
     estimated_credits: float | None = None
     error_code: str | None = None
     error_message: str | None = None
+    actual_credits: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -291,6 +305,15 @@ class MediaArtifact:
     height: int | None = None
     provider_task_id: str | None = None
     source_url_redacted: str | None = None
+    container: str | None = None
+    video_codec: str | None = None
+    pixel_format: str | None = None
+    average_frame_rate: str | None = None
+    audio_stream_present: bool | None = None
+    audio_codec: str | None = None
+    sample_rate: int | None = None
+    channel_count: int | None = None
+    bit_rate: int | None = None
     provenance: Mapping[str, Any] = field(default_factory=dict)
 
 

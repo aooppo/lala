@@ -63,14 +63,27 @@ automatic pinning or content creation.
 ## `configs/voice-profile.yaml`
 
 Includes every user-requested profile field plus `mode`, `script_audio` mapping,
-`canonical_source_manifest`, and `approval_status`. Paths must remain under `assets/voice/`.
+`canonical_source_manifest`, and staged `approval_status` (`pending`, `verified`,
+`approved_for_smoke`, `production_approved`, `rejected`). Paths must remain under `assets/voice/`.
 Secrets are forbidden. A canonical source manifest is hash-pinned under
 `assets/voice/metadata/` and lists content-validated PCM WAVs under `assets/voice/source/`; these
 records remain clone-source inputs only. Approved-audio mode requires an approved WAV and exact
 script hash mapping. Cloned-voice mode requires an approved `heygen_voice` provider, `starfish`
 model, private voice ID/version, WAV output, and optional approved language/speed/sample rate; it
 produces a derived WAV. A script-matched approved WAV is preferred in either mode. Canonical
-sources alone leave the profile pending and cannot populate `script_audio`.
+sources alone leave the profile pending and cannot populate `script_audio`. The owner-supplied ID
+may be recorded while pending, but `approved_for_smoke` additionally requires a real read-only
+verification run ID/time and the exact expected voice name. API-derived language, locale, gender,
+engine, type, and creation time remain null until observed; accent/style are never guessed.
+
+## `configs/brand-assets.yaml`
+
+Defines approved or missing `decorolala_logo`, `lala_like_heart`, `five_lala_likes`,
+`five_percent_off_coupon`, `club_lala`, and `end_card` roles. An approved record contains path,
+SHA-256, version, approval status, reviewer, reviewed time, and source reference, and its path must
+remain under `assets/brand/approved/`. Missing approved assets resolve to deterministic draft SVG/
+PNG files under `outputs/graphics/`, visibly marked `DRAFT / NOT MTL APPROVED`; drafts are valid for
+smoke assembly but make promotion fail closed.
 
 ## `configs/video-presets.yaml`
 
@@ -90,6 +103,11 @@ Contains no credentials. It records:
   statuses, known per-second talking price, and Starfish speech endpoint/text/speed/output limits.
 - Global live bounds: three variations, two final edits, concurrency one, retries two, timeout
   1800 seconds, `allow_live_calls: false`.
+
+Runway `gen4_turbo` requires image/model/ratio and accepts optional prompt text and duration in the
+pinned SDK; the configured smoke preset supplies both a non-empty versioned prompt and five-second
+duration. `gen4.5` requires prompt text, image, ratio, and duration. Submission estimated credits
+and terminal actual credits are separate nullable facts.
 
 Every provider/model used by a preset must resolve to one documented capability record. Unknown or
 unsupported fields are rejected before provider construction.

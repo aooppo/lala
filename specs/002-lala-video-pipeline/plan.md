@@ -1,6 +1,6 @@
 # Implementation Plan: Reproducible Lady LaLa Video Pipeline
 
-**Branch**: `002-lala-video-pipeline` | **Date**: 2026-08-19 | **Spec**:
+**Branch**: `fix/goal2-production-readiness` | **Date**: 2026-08-19 | **Spec**:
 [spec.md](spec.md)
 
 **Input**: Feature specification from `specs/002-lala-video-pipeline/spec.md`
@@ -18,15 +18,18 @@ HeyGen v3 is the default first talking-shot adapter because its documented image
 the approved keyframe and approved audio directly. A Runway `gwm1_avatars` talking adapter is also
 supported when configuration maps the keyframe hash to a previously approved custom avatar ID.
 Runway `gen4_turbo` remains the default motion/B-roll model, with `gen4.5` configurable for higher-
-cost motion. Voice Mode A (existing approved WAV) remains preferred; approved Mode B profiles use
-the provider-neutral voice protocol through a concrete HeyGen Starfish adapter without inventing
-a voice ID, approval, or production input.
+cost motion. Voice Mode A (existing approved WAV) remains preferred. Mode B uses the owner-supplied
+HeyGen Starfish voice only after read-only verification, advances it no further than approved-for-
+smoke without human QA, and retains the provider-neutral voice protocol. Independent Runway motion
+smoke, explicit pre-construction budgets, technical contact sheets, and deterministic local brand
+graphics are added before a minimal tooltip candidate can be assembled.
 
 ## Technical Context
 
 **Language/Version**: Python 3.11 or newer
 
-**Primary Dependencies**: Pillow, PyYAML, `runwayml==5.15.0`, HTTPX, local FFmpeg/FFprobe
+**Primary Dependencies**: Pillow, PyYAML, `python-dotenv`, `runwayml==5.15.0`, HTTPX, local
+FFmpeg/FFprobe
 
 **Storage**: Immutable approved inputs under `assets/`; keyframe provenance beside approved
 keyframes; canonical voice-source manifests under `assets/voice/metadata/`; append-only
@@ -44,12 +47,13 @@ local FFmpeg export smoke test when FFmpeg is installed; all automated network a
 by default; metadata writes complete incrementally before external work advances
 
 **Constraints**: No source mutation, script rewriting, fabricated QA/costs, automatic approval,
-networked automated tests, or paid calls without all guards; provider task IDs are never
-resubmitted; first live video scope is one short talking result
+networked automated tests, or paid calls without all guards and an explicit provider budget;
+provider task IDs are never resubmitted; talking and motion first-smoke scopes remain independent
+one-result workflows
 
-**Scale/Scope**: Three presets, at most three talking and three motion alternatives per applicable
-shot, at most two final edits, eight-to-twelve-second initial talking validation, and one operator
-per local repository
+**Scale/Scope**: Three offline presets, one five-second motion smoke, one eight-to-twelve-second
+talking smoke, at most three talking and three motion alternatives per applicable shot, at most
+two final edits, and paid end-to-end remediation limited to the tooltip preset
 
 ## Constitution Check
 
@@ -62,11 +66,12 @@ per local repository
 - **Provider-neutral reproducibility**: PASS. Video orchestration depends only on talking, motion,
   and voice protocols plus normalized domain types. SDK/HTTP payloads remain in adapters.
 - **Paid-call staging**: PASS. Dry run cannot instantiate providers. Live work requires `--live`,
-  `VIDEO_ALLOW_LIVE_CALLS=true`, provider credentials, bounded limits, and prior-stage evidence.
+  `VIDEO_ALLOW_LIVE_CALLS=true`, provider-specific smoke/full flags, credentials, explicit budgets,
+  bounded limits, and prior-stage evidence. Motion smoke is independent from talking approval.
 - **Offline tests and deterministic editing**: PASS. Providers and downloads are faked in tests;
   deterministic editing uses logged FFmpeg commands with no-overwrite semantics.
 - **Human approval**: PASS. QA decisions start blank, shot selections are explicit inputs, and
-  promotion requires a reviewed candidate and copies it with provenance.
+  promotion requires a reviewed candidate, copies it with provenance, and rejects draft graphics.
 - **Official provider behavior**: PASS. Request fields, API version, model names, limits, and dated
   pricing sources are recorded in `research.md` and configuration.
 - **Delivery evidence**: PASS. Requirements trace through `tasks.md`; completion includes dry runs,
@@ -110,6 +115,7 @@ assets/
 
 configs/
 ├── anchor-manifest.yaml
+├── brand-assets.yaml
 ├── keyframe-manifest.yaml
 ├── script-manifest.yaml
 ├── voice-profile.yaml
@@ -122,6 +128,7 @@ prompts/
 └── product-broll-v1.txt
 
 src/lala_workflow/
+├── env.py
 ├── audio/
 │   ├── __init__.py
 │   └── validation.py
@@ -137,6 +144,7 @@ src/lala_workflow/
 │   ├── downloads.py
 │   ├── domain.py
 │   ├── execution.py
+│   ├── graphics.py
 │   ├── naming.py
 │   ├── planning.py
 │   ├── promotion.py
@@ -164,6 +172,7 @@ outputs/
 ├── audio/
 ├── talking_shots/
 ├── broll/
+├── graphics/
 ├── edits/
 ├── final/
 └── approved_videos/
@@ -201,7 +210,9 @@ Implement HeyGen image-plus-audio translation and polling, HeyGen Starfish exact
 derived PCM WAV, approved-mapping Runway avatar video translation, Runway image-to-video motion
 translation, normalized retries/downloads, task-ID non-resubmission, exact live guards, one-result
 first smoke, and immutable reviewed-smoke validation before up-to-three talking alternatives.
-Tests use injected fake clients and downloaders only.
+HeyGen asset/video mutations use documented idempotency; Starfish speech has no documented
+idempotency parameter in the current operation and is therefore never automatically replayed.
+Tests use HTTPX capturing transports or injected official-SDK fakes and downloaders only.
 
 ### Phase D — Editing, review, report, and promotion
 
@@ -216,8 +227,21 @@ input-backed dry runs when authoritative inputs exist, safe missing-input valida
 artifact/QA/cost inspection, secret scans, pre/post package-member and approved-source hash
 comparisons, Spec Kit analysis and convergence, and documentation/progress updates. Copy the
 owner-supplied keyframe, three exact-byte scripts, and eight canonical voice sources only after
-their package hashes pass. Live work remains blocked until a real approved voice profile or
-per-script narration, credentials, environment permission, and staged human approvals exist.
+their package hashes pass. Live work remains blocked until the owner-supplied voice is verified,
+credentials and environment permission are present, explicit budgets pass, and each required
+human review has occurred.
+
+### Phase F — Production-readiness remediation
+
+Load project-local environment values safely; verify the exact owner-supplied voice read-only;
+stage the voice profile as approved-for-smoke; repair HeyGen multipart, failure, idempotency,
+capability, and run-local asset reuse contracts; make Runway motion smoke independent; enforce
+pre-construction USD/credit budgets; capture actual Runway terminal cost; expand FFprobe evidence
+and generate verification frames/contact sheets; turn local graphic shots into hashed approved or
+explicit draft edit inputs; block draft promotion; add deterministic crop candidates and CI; then
+run the complete offline and staged-live audit without enabling any live flag on the owner's behalf.
+For `gen4_turbo`, keep prompt text optional per the pinned official SDK while still supplying a
+versioned non-empty prompt for the configured smoke preset.
 
 ## Complexity Tracking
 

@@ -29,6 +29,12 @@ def estimate_plan_cost(
         bucket = buckets[key]
         bucket["duration_known"] = False
         bucket["outputs"] = 1
+        price, source, date = _unit_price(
+            config, str(profile.provider or "unknown"), str(profile.model or "unknown")
+        )
+        bucket["price"] = price
+        bucket["source"] = source
+        bucket["date"] = date
         unknown = True
     for shot in plan.shots:
         for request in shot.requests:
@@ -150,6 +156,14 @@ def _unit_price(
                 float(record["usd_per_unit"]),
                 str(record.get("source") or ""),
                 str(record.get("verified_on") or config.verified_on),
+            )
+    if provider_name == "heygen_voice":
+        pricing = settings.get("pricing", {})
+        if isinstance(pricing, dict) and pricing.get("usd_per_unit") is not None:
+            return (
+                float(pricing["usd_per_unit"]),
+                str(pricing.get("source") or ""),
+                str(pricing.get("verified_on") or config.verified_on),
             )
     if provider_name == "runway":
         models = settings.get("supported_models", {})

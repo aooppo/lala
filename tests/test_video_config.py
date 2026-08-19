@@ -24,17 +24,12 @@ def test_loads_all_approved_sources_presets_and_bounds(video_project_root: Path)
     assert config.input_blockers == ()
 
 
-def test_repository_imported_inputs_leave_only_the_voice_external_blocker() -> None:
+def test_repository_imported_inputs_have_owner_voice_smoke_verification() -> None:
     root = Path(__file__).resolve().parents[1]
-    with pytest.raises(ExternalInputBlocked) as caught:
-        load_video_config(root, require_inputs=True)
-    message = str(caught.value)
-    assert message == (
-        "Goal 2 still requires a real approved HeyGen Starfish/private Lady LaLa voice profile "
-        "or approved per-script Lady LaLa narration WAVs."
-    )
-    assert "keyframe" not in message.lower()
-    assert "script" in message.lower()
+    config = load_video_config(root, require_inputs=True)
+    assert config.voice_profile.approval_status == "approved_for_smoke"
+    assert (config.voice_profile.verification_run_id or "").startswith("LALA-VOICE-VERIFY-")
+    assert config.voice_profile.engine == "starfish"
 
 
 def test_preset_limit_above_owner_bound_is_rejected(video_project_root: Path) -> None:
@@ -87,6 +82,11 @@ def test_cloned_voice_requires_a_configured_voice_provider_model(
             "model": "invented-model",
             "voice_id": "approved-voice-id",
             "script_audio": {},
+            "verification_run_id": "synthetic-verification-run",
+            "verification_time": "2026-08-19T12:00:00+08:00",
+            "voice_name": "Synthetic Voice",
+            "engine": "starfish",
+            "type": "private",
         }
     )
     path.write_text(yaml.safe_dump(profile, sort_keys=False), encoding="utf-8")

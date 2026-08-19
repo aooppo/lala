@@ -4,10 +4,11 @@ from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 from ..video.domain import MediaArtifact, MotionVideoRequest, VideoTaskResult
+from .protocol_compat import ProviderProtocolMeta
 
 
 @runtime_checkable
-class MotionVideoProvider(Protocol):
+class MotionVideoProvider(Protocol, metaclass=ProviderProtocolMeta):
     def validate_request(self, request: MotionVideoRequest) -> None: ...
 
     def submit(self, request: MotionVideoRequest) -> str: ...

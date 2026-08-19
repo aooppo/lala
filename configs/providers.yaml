@@ -17,6 +17,36 @@ providers:
     poll_endpoint: /v3/videos/{task_id}
     model: avatar_iv
     max_asset_bytes: 33554432
+    idempotency:
+      max_length: 255
+      replay_hours: 24
+      request_in_progress_code: request_in_progress
+    capabilities:
+      arbitrary_image:
+        request_type: image
+        motion_prompt: true
+        expressiveness: false
+        engine: false
+      photo_avatar_avatar_iv:
+        request_type: avatar
+        motion_prompt: true
+        expressiveness: true
+        engine: avatar_iv
+      photo_avatar_avatar_v:
+        request_type: avatar
+        motion_prompt: true
+        expressiveness: false
+        engine: avatar_v
+      video_avatar_avatar_iv:
+        request_type: avatar
+        motion_prompt: false
+        expressiveness: false
+        engine: avatar_iv
+      video_avatar_avatar_v:
+        request_type: avatar
+        motion_prompt: true
+        expressiveness: false
+        engine: avatar_v
     terminal_success: completed
     terminal_failure: failed
     pricing:
@@ -29,6 +59,8 @@ providers:
     responsibility: voice
     api_base_url: https://api.heygen.com
     submit_endpoint: /v3/voices/speech
+    detail_endpoint: /v3/voices/{voice_id}
+    list_endpoint: /v3/voices
     model: starfish
     max_text_characters: 5000
     speed_range: [0.5, 2.0]
@@ -36,7 +68,11 @@ providers:
     documentation_source: https://developers.heygen.com/reference/generate-speech
     voice_list_source: https://developers.heygen.com/reference/list-voices
     verified_on: "2026-08-19"
-    pricing: null
+    pricing:
+      unit: output_second
+      usd_per_unit: 0.000667
+      source: https://developers.heygen.com/docs/pricing
+      verified_on: "2026-08-19"
   runway:
     responsibility: motion
     api_version: "2024-11-06"
@@ -48,11 +84,13 @@ providers:
         durations: [2, 3, 4, 5, 6, 7, 8, 9, 10]
         ratios: ["1280:720"]
         prompt_required: false
+        max_prompt_image_data_uri_bytes: 5242880
         credits_per_second: 5
       gen4.5:
         durations: [2, 3, 4, 5, 6, 7, 8, 9, 10]
         ratios: ["1280:720"]
         prompt_required: true
+        max_prompt_image_data_uri_bytes: 5242880
         credits_per_second: 12
     credit_usd: 0.01
     pricing_source: https://docs.dev.runwayml.com/guides/pricing/

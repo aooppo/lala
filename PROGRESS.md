@@ -692,7 +692,10 @@
 - V6 Owner QA was archived as `P1_1_V6_SMOKE_HUMAN_QA_FAILED`: Camera Lock PASS, Framing FAIL,
   Identity PASS, Eyes FAIL, Mouth PASS, Motion FAIL, and MTL Ready FAIL. Technical execution
   remains PASS while human visual acceptance is FAIL. The original run review remains blank and
-  byte-identical; the ignored reviewed copy records the Owner decision separately.
+  byte-identical; the ignored reviewed copy records the Owner decision separately. The original
+  blank package review SHA-256 is
+  `c04e271773e31f81744f94602a9ed782b1a8b792bdbbdaa2e81c704a9b86fa31`; the reviewed-copy
+  SHA-256 is `67ceedc5ce97a9436086fd6b4ff5a3cb8026bd56c68042ddcc4c56dd6eb7ab8e`.
 - Added provider-neutral local Subject Lock diagnostics under `src/lala_workflow/video/qa/` with
   configured thresholds in `configs/video-qa.yaml`. The bounded Pillow tracker measures the
   dominant red-gown region as `color_region_proxy`; it does not claim face/full-body segmentation,

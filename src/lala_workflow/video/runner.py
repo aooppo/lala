@@ -39,6 +39,11 @@ from .execution import (
 )
 from .planning import build_shot_plan
 from .prompts import VideoPromptError, load_video_prompt, utf16_code_units
+from .motion_v7 import (
+    candidate_credit_estimate,
+    build_v7_comparison,
+    load_v7_candidates,
+)
 from .reporting import blank_review_rows, read_video_summary, summary_markdown
 from .review import ReviewError, load_external_review_row
 from .storage import QA_FIELDS, VideoRunContext, VideoRunStorage
@@ -1251,6 +1256,198 @@ def preview_motion_smoke(project_root: Path, options: VideoRunOptions) -> VideoR
     return VideoRunOutcome(run.run_id, run.path, run, plan, 1, 0, "DRY_RUN_COMPLETE")
 
 
+def preview_motion_v7(project_root: Path, *, keyframe_id: str | None) -> VideoRunOutcome:
+    """Write one local-only V7 A/B/C planning run without a live counterpart."""
+
+    config = load_video_config(project_root, require_inputs=False)
+    keyframe = _keyframe(config, keyframe_id)
+    candidates = load_v7_candidates(config.root)
+    planned_shots: list[PlannedShot] = []
+    requests: list[MotionVideoRequest] = []
+    candidate_metadata: list[dict[str, Any]] = []
+    estimated_credits = 0.0
+    estimate_known = True
+    for index, candidate in enumerate(candidates, start=1):
+        _validate_motion_provider_settings(
+            config,
+            candidate.model,
+            candidate.duration_seconds,
+            candidate.ratio,
+            candidate.prompt,
+        )
+        request_id = f"motion-v7-{candidate.candidate_id}"
+        planned = PlannedRequest(
+            request_id=request_id,
+            shot_id=candidate.candidate_id,
+            variation=index,
+            responsibility="motion",
+            provider=candidate.provider,
+            model=candidate.model,
+            duration_seconds=float(candidate.duration_seconds),
+        )
+        planned_shots.append(
+            PlannedShot(
+                shot_id=candidate.candidate_id,
+                kind="motion",
+                source_role=keyframe.keyframe_id,
+                prompt=candidate.prompt,
+                duration_seconds=float(candidate.duration_seconds),
+                variation_count=1,
+                selection_required=True,
+                requests=(planned,),
+            )
+        )
+        estimate = candidate_credit_estimate(candidate, config.providers)
+        if estimate is None:
+            estimate_known = False
+        else:
+            estimated_credits += estimate
+        candidate_metadata.append(candidate.evidence(estimate))
+    plan = ShotPlan(
+        preset="motion-v7",
+        mode="motion_v7_dry_run",
+        script_id="not_applicable",
+        aspect_ratio="16:9",
+        resolution="1280:720",
+        frame_rate=30,
+        shots=tuple(planned_shots),
+        final_edit_variations=0,
+    )
+    if plan.provider_call_count != 3:
+        raise VideoConfigError("V7 dry-run must contain exactly three planned requests")
+
+    storage = VideoRunStorage(config.root)
+    run = storage.create_run("motion-v7")
+    for candidate, shot in zip(candidates, planned_shots, strict=True):
+        planned = shot.requests[0]
+        requests.append(
+            MotionVideoRequest(
+                request_id=f"{run.run_id}-{planned.request_id}",
+                run_id=run.run_id,
+                preset="motion-v7",
+                shot_id=candidate.candidate_id,
+                variation=planned.variation,
+                provider=candidate.provider,
+                model=candidate.model,
+                image_path=config.root / keyframe.path,
+                image_sha256=keyframe.sha256,
+                prompt_path=config.root / candidate.prompt.path,
+                prompt_text=candidate.prompt.text,
+                prompt_sha256=candidate.prompt.sha256,
+                ratio=candidate.ratio,
+                duration_seconds=candidate.duration_seconds,
+                seed=None,
+                output_format="mp4",
+                timeout_seconds=config.limits.provider_timeout_seconds,
+                max_retries=config.limits.max_retries,
+            )
+        )
+    cost = estimate_plan_cost(plan, config, talking_duration_seconds=None)
+    cost.update(
+        {
+            "estimated_runway_credits": estimated_credits if estimate_known else None,
+            "actual_runway_credits": None,
+            "paid_calls": 0,
+        }
+    )
+    comparison = build_v7_comparison()
+    storage.append_event(
+        run,
+        "validated",
+        {
+            "mode": "DRY_RUN",
+            "action": "motion_v7_dry_run",
+            "provider_call_count": plan.provider_call_count,
+            "submission_count": 0,
+        },
+    )
+    storage.write_json_new(
+        run,
+        "request.json",
+        {
+            "run_id": run.run_id,
+            "mode": "DRY_RUN",
+            "action": "motion_v7_dry_run",
+            "preset": "motion-v7",
+            "provider": "runway",
+            "provider_call_count": plan.provider_call_count,
+            "submission_count": 0,
+            "paid_calls": 0,
+            "requests": [to_primitive(request) for request in requests],
+            "candidate_metadata": candidate_metadata,
+            "subject_lock_comparison": comparison,
+        },
+    )
+    storage.write_yaml_new(
+        run,
+        "resolved-config.yaml",
+        {
+            "action": "motion_v7_dry_run",
+            "live": False,
+            "keyframe_id": keyframe.keyframe_id,
+            "candidate_metadata": candidate_metadata,
+            "subject_lock_comparison": comparison,
+            "p1_2_live_gate": "BLOCKED_PENDING_P1_1_HUMAN_PASS",
+        },
+    )
+    storage.write_bytes_new(run, "script.txt", b"")
+    storage.write_json_new(run, "script-hash.json", {"status": "not_applicable", "sha256": None})
+    storage.write_json_new(run, "audio-hash.json", {"status": "not_applicable", "sha256": None})
+    storage.write_json_new(run, "keyframe-hash.json", _keyframe_evidence(keyframe, config))
+    storage.write_json_new(
+        run,
+        "shot-plan.json",
+        {
+            **to_primitive(plan),
+            "candidate_metadata": candidate_metadata,
+            "subject_lock_comparison": comparison,
+        },
+    )
+    storage.write_json_new(
+        run,
+        "provider-results.json",
+        {
+            "status": "DRY_RUN",
+            "provider": "runway",
+            "submission_count": 0,
+            "results": [],
+        },
+    )
+    storage.write_text_new(run, "edit-commands.txt", "")
+    storage.write_review_new(
+        run,
+        blank_review_rows(
+            run.run_id,
+            "motion-v7",
+            [
+                {
+                    "video_id": item["candidate_id"],
+                    "candidate": f'{item["candidate_id"]}-planned.mp4',
+                }
+                for item in candidate_metadata
+            ],
+        ),
+    )
+    storage.write_json_new(run, "cost.json", cost)
+    storage.write_text_new(
+        run,
+        "summary.md",
+        summary_markdown(
+            run_id=run.run_id,
+            preset="motion-v7",
+            status="DRY_RUN_COMPLETE",
+            provider_call_count=plan.provider_call_count,
+            output_count=0,
+            total_provider_cost=cost.get("total_provider_cost"),
+        ),
+    )
+    storage.append_event(run, "dry_run_completed", {"submission_count": 0, "paid_calls": 0})
+    storage.assert_complete(run)
+    return VideoRunOutcome(
+        run.run_id, run.path, run, plan, plan.provider_call_count, 0, "DRY_RUN_COMPLETE"
+    )
+
+
 def generate_motion_variations(
     project_root: Path,
     options: VideoRunOptions,
@@ -2291,6 +2488,15 @@ def handle_video_command(args: Any) -> tuple[int, Any]:
 
             return 0, derive_talking_crop(args.project_root, args.source)
         raise ValueError(f"keyframe command is not implemented: {args.keyframe_command}")
+    if args.video_command == "motion-v7-dry-run":
+        outcome = preview_motion_v7(args.project_root, keyframe_id=args.keyframe)
+        return 0, {
+            "run_id": outcome.run_id,
+            "run_dir": str(outcome.run_dir),
+            "status": outcome.status,
+            "planned_provider_calls": outcome.provider_call_count,
+            "paid_calls": 0,
+        }
     if args.video_command == "motion-smoke-test":
         options = VideoRunOptions(
             preset="motion_smoke",

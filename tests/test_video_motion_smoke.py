@@ -206,6 +206,57 @@ def test_motion_smoke_v4_camera_lock_dry_run_records_exact_provenance(
     assert cost["actual_runway_credits"] is None
 
 
+def test_motion_smoke_v5_eye_mouth_lock_dry_run_records_exact_provenance(
+    video_project_root: Path,
+) -> None:
+    v3_path = video_project_root / "prompts/home-broll-v3.txt"
+    v4_path = video_project_root / "prompts/home-broll-v4.txt"
+    v5_path = video_project_root / "prompts/home-broll-v5.txt"
+    v5_bytes = v5_path.read_bytes()
+    v5_text = v5_bytes.decode("utf-8")
+
+    assert hashlib.sha256(v3_path.read_bytes()).hexdigest() == (
+        "897c00baabbf51304268c842d811bec1927fafc4e0042ad11bf63867933e69b5"
+    )
+    assert hashlib.sha256(v4_path.read_bytes()).hexdigest() == (
+        "b3460aaa0de7738e53de6163d1dc53875cd5306d05f71dbe7d3e2e27117b666c"
+    )
+    assert v5_bytes.endswith(b"\n")
+    assert len(v5_text.encode("utf-16-le")) // 2 == 837
+    assert hashlib.sha256(v5_bytes).hexdigest() == (
+        "b27caa4269db46dd7d9ad5b700080418df7067e194a60af38b9cf5c99b7fae22"
+    )
+
+    outcome = run_motion_smoke(
+        video_project_root,
+        VideoRunOptions(
+            preset="motion_smoke",
+            action="motion_smoke",
+            keyframe_id="hero",
+            motion_variations=1,
+            motion_prompt="prompts/home-broll-v5.txt",
+            max_runway_credits=25,
+        ),
+    )
+
+    request = json.loads((outcome.run_dir / "request.json").read_text(encoding="utf-8"))
+    results = json.loads(
+        (outcome.run_dir / "provider-results.json").read_text(encoding="utf-8")
+    )
+    cost = json.loads((outcome.run_dir / "cost.json").read_text(encoding="utf-8"))
+    item = request["requests"][0]
+    assert outcome.status == "DRY_RUN_COMPLETE"
+    assert outcome.submission_count == 0
+    assert request["provider_call_count"] == 1
+    assert item["prompt_path"].endswith("prompts/home-broll-v5.txt")
+    assert item["prompt_text"] == v5_text
+    assert item["prompt_sha256"] == hashlib.sha256(v5_bytes).hexdigest()
+    assert results["submission_count"] == 0
+    assert results["results"] == []
+    assert cost["estimated_runway_credits"] == 25
+    assert cost["actual_runway_credits"] is None
+
+
 def test_motion_smoke_rejects_overlong_prompt_before_run_creation(
     video_project_root: Path,
 ) -> None:

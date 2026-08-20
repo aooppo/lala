@@ -632,3 +632,17 @@
   prompt evidence remain unchanged. P1-2 remains blocked pending P1-1 v4 human QA.
 - Paid calls made in this checkpoint: **1** (the single authorized Runway P1-1 v4 smoke). No
   P1-2, HeyGen, voice, talking, or other provider call was made.
+
+## Goal 2 Checkpoint 17 — P1-1 v5 Eye/Mouth Lock candidate
+
+- Owner human QA accepted the v4 camera lock, framing, background, identity, face, age, hair, body
+  proportions, wardrobe, jewelry, and technical export. Eyes, mouth, and motion failed because of
+  two prolonged eye-closure periods, slight late-shot mouth opening, and unnecessary subject
+  movement; v4 is not MTL-ready. The original run review remains blank, and the reviewed FAIL copy
+  is stored outside Git under `outputs/reviews/`.
+- Added `prompts/home-broll-v5.txt` as an eye/mouth/body-lock candidate. It removes blink and
+  breathing instructions, requires naturally open eyes, steady gaze, gently closed lips, and a
+  visually steady body while retaining v4's camera/framing lock. v5 is awaiting live generation
+  and human QA; it is not approved, production-ready, or MTL-ready.
+- The v3 default, homepage establishing preset, P1-2 motion-variation prompts, and historical v1–v4
+  evidence remain unchanged. P1-2 remains blocked pending P1-1 v5 human QA.

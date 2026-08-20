@@ -261,6 +261,12 @@ Every invocation writes the standard thirteen-artifact append-only bundle and bl
 Use `--dry-run` to validate the same smoke/review/hash/cap/variation gates with zero provider
 submissions.
 
+For the P1-2 planning checkpoint only, `motion-generate --dry-run` may add
+`--motion-smoke-qa-attested`. This records the owner's supplied Smoke-QA status without changing
+the blank review copy or authorizing Live; the flag is rejected on any Live invocation. The three
+design candidates and exact prompt files are documented in
+`specs/003-post-smoke-motion-variations/p1-2-motion-variation-plan.md`.
+
 Mode B uses the same `HEYGEN_API_KEY` only when `configs/voice-profile.yaml` identifies an
 explicitly approved `heygen_voice` / `starfish` private voice ID. Exact script bytes are submitted
 to HeyGen speech generation, and the downloaded audio is converted to a derived PCM WAV with its

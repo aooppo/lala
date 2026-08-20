@@ -64,6 +64,11 @@ def configure_parser(subparsers: Any) -> None:
     motion_generate.add_argument("--variations", type=int, default=1)
     motion_generate.add_argument("--motion-smoke-run-id", required=True)
     motion_generate.add_argument("--motion-smoke-review-file", required=True)
+    motion_generate.add_argument(
+        "--motion-smoke-qa-attested",
+        action="store_true",
+        help="dry-run only: record owner-attested smoke QA without editing the review copy",
+    )
     motion_generate.add_argument("--max-runway-credits", type=float)
     _mode(motion_generate)
     generate = commands.add_parser("generate", help="preview or generate shot alternatives")

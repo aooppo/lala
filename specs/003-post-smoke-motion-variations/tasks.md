@@ -37,3 +37,15 @@
   current copied review CSV is blank; live post-smoke generation therefore fails closed with the
   precise manual-QA blocker. No live credentials or owner live permission were present; new paid
   calls in this task: 0.
+
+## P1-2 planning checkpoint — 2026-08-20
+
+- [X] T011 [US1] Add three versioned controlled-motion prompt candidates under `prompts/` with
+  measured UTF-16 counts below the Runway limit.
+- [X] T012 [US1] Record the ordered variation matrix, invariants, risks, acceptance criteria, and
+  25/75-credit estimates in `specs/003-post-smoke-motion-variations/p1-2-motion-variation-plan.md`.
+- [X] T013 [US1] Add the planning-only evidence schema and owner-attestation dry-run guard in
+  `specs/003-post-smoke-motion-variations/contracts/p1-2-evidence-schema.md` and
+  `src/lala_workflow/video/runner.py`; reject the attestation on Live paths.
+- [X] T014 [US1] Execute the three-variation dry-run with zero paid submissions and preserve its
+  evidence at `outputs/broll/p1-2-motion-variation-plan-20260820-001/p1-2-dry-run.json`.

@@ -61,6 +61,7 @@ class VideoRunOptions:
     smoke_review_file: Path | None = None
     motion_smoke_run_id: str | None = None
     motion_smoke_review_file: Path | None = None
+    motion_smoke_qa_attested: bool = False
     provider_name: str | None = None
     max_provider_cost_usd: float | None = None
     max_runway_credits: float | None = None
@@ -1260,6 +1261,10 @@ def generate_motion_variations(
     """Generate 1..N Runway-only variations unlocked by a reviewed motion smoke."""
     if options.action != "motion_generate":
         raise ValueError("generate_motion_variations requires a motion_generate option")
+    if options.motion_smoke_qa_attested:
+        raise ExternalInputBlocked(
+            "--motion-smoke-qa-attested is planning-only and cannot authorize Live generation"
+        )
     environment = os.environ if environ is None else environ
     config = load_video_config(project_root, require_inputs=False)
     keyframe = _keyframe(config, options.keyframe_id)
@@ -1273,7 +1278,8 @@ def generate_motion_variations(
     duration = options.motion_duration if options.motion_duration is not None else 5
     ratio = options.motion_ratio or "1280:720"
     smoke, review_evidence = _validate_passing_motion_variation_smoke(
-        config.root, options.smoke_run_id, options.smoke_review_file
+        config.root, options.smoke_run_id, options.smoke_review_file,
+        allow_owner_attestation=False,
     )
     smoke_request = _first_motion_request(smoke)
     if (smoke_request.get("keyframe_sha256") or smoke_request.get("image_sha256")) != keyframe.sha256:
@@ -1338,7 +1344,8 @@ def preview_motion_variations(
             f"{config.limits.max_motion_variations_per_shot}"
         )
     smoke, review_evidence = _validate_passing_motion_variation_smoke(
-        config.root, options.smoke_run_id, options.smoke_review_file
+        config.root, options.smoke_run_id, options.smoke_review_file,
+        allow_owner_attestation=options.motion_smoke_qa_attested,
     )
     smoke_request = _first_motion_request(smoke)
     if (smoke_request.get("keyframe_sha256") or smoke_request.get("image_sha256")) != keyframe.sha256:
@@ -1569,7 +1576,13 @@ def _create_motion_provider(config: VideoProjectConfig, environment: Mapping[str
     return RunwayMotionProvider(config.providers["runway"], api_key=str(environment["RUNWAYML_API_SECRET"]))
 
 
-def _validate_passing_motion_variation_smoke(project_root: Path, run_id: str | None, review_file: Path | None) -> tuple[dict[str, Any], dict[str, str]]:
+def _validate_passing_motion_variation_smoke(
+    project_root: Path,
+    run_id: str | None,
+    review_file: Path | None,
+    *,
+    allow_owner_attestation: bool = False,
+) -> tuple[dict[str, Any], dict[str, Any]]:
     if not run_id or "/" in run_id or "\\" in run_id:
         raise ExternalInputBlocked("motion generation requires a reviewed passing --motion-smoke-run-id")
     run_dir = (project_root / "runs" / run_id).resolve()
@@ -1604,6 +1617,11 @@ def _validate_passing_motion_variation_smoke(project_root: Path, run_id: str | N
         raise ExternalInputBlocked("motion smoke output provenance is missing")
     if review_file is None:
         raise ExternalInputBlocked("motion generation requires an immutable --motion-smoke-review-file")
+    if allow_owner_attestation:
+        evidence = _validate_owner_motion_qa_attestation(
+            project_root, run_dir, candidate, review_file
+        )
+        return request, evidence
     try:
         row, evidence = _load_motion_review_copy(project_root, run_dir, candidate, review_file)
     except ReviewError as exc:
@@ -1630,6 +1648,64 @@ def _validate_passing_motion_variation_smoke(project_root: Path, run_id: str | N
     if sha256_file(source_path) != artifact.get("sha256"):
         raise ExternalInputBlocked("motion smoke output hash no longer matches evidence")
     return request, evidence
+
+
+def _validate_owner_motion_qa_attestation(
+    project_root: Path,
+    run_dir: Path,
+    candidate: str,
+    review_file: Path | None,
+) -> dict[str, Any]:
+    """Validate planning-only owner attestation without manufacturing QA fields."""
+
+    if review_file is None:
+        raise ExternalInputBlocked(
+            "owner-attested motion planning requires an immutable --motion-smoke-review-file"
+        )
+    root = project_root.resolve()
+    path = review_file if review_file.is_absolute() else root / review_file
+    path = path.resolve()
+    reviews_root = (root / "outputs/reviews").resolve()
+    if reviews_root not in path.parents or not path.is_file():
+        raise ExternalInputBlocked("review file must be an existing copy under outputs/reviews")
+    baseline_path = run_dir / "review.csv"
+    try:
+        with baseline_path.open(newline="", encoding="utf-8") as source:
+            baseline_reader = csv.DictReader(source)
+            baseline_fields = baseline_reader.fieldnames or []
+            baseline_rows = [
+                dict(row) for row in baseline_reader if row.get("candidate") == candidate
+            ]
+        with path.open(newline="", encoding="utf-8") as source:
+            reader = csv.DictReader(source)
+            fields = reader.fieldnames or []
+            rows = [dict(row) for row in reader if row.get("candidate") == candidate]
+    except (OSError, UnicodeDecodeError, csv.Error) as exc:
+        raise ExternalInputBlocked("motion review CSV is unreadable") from exc
+    if len(baseline_rows) != 1 or len(rows) != 1 or fields != baseline_fields:
+        raise ExternalInputBlocked("owner-attested motion review provenance is invalid")
+    baseline = baseline_rows[0]
+    row = rows[0]
+    for field in ("run_id", "video_id", "preset", "candidate"):
+        if row.get(field) != baseline.get(field):
+            raise ExternalInputBlocked(
+                f"owner-attested motion review provenance mismatch: {field}"
+            )
+    human_fields = [
+        field
+        for field in baseline_fields
+        if field not in {"run_id", "video_id", "preset", "candidate"}
+    ]
+    if any(str(baseline.get(field) or "").strip() for field in human_fields):
+        raise ExternalInputBlocked(
+            "run motion review human fields must remain blank append-only evidence"
+        )
+    return {
+        "path": path.relative_to(root).as_posix(),
+        "sha256": sha256_file(path),
+        "status": "passed_by_owner_instruction",
+        "source_review_copy_unchanged": True,
+    }
 
 
 def _load_motion_review_copy(project_root: Path, run_dir: Path, candidate: str, review_file: Path) -> tuple[dict[str, str], dict[str, str]]:
@@ -2338,6 +2414,7 @@ def handle_video_command(args: Any) -> tuple[int, Any]:
             motion_prompt=getattr(args, "prompt", None),
             smoke_run_id=getattr(args, "motion_smoke_run_id", None),
             smoke_review_file=(Path(args.motion_smoke_review_file) if getattr(args, "motion_smoke_review_file", None) else None),
+            motion_smoke_qa_attested=bool(getattr(args, "motion_smoke_qa_attested", False)),
         )
         if args.live:
             outcome = generate_motion_variations(args.project_root, options)

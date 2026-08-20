@@ -121,6 +121,20 @@ def test_motion_variations_require_review_and_match_keyframe(video_project_root:
         )
 
 
+def test_p1_2_prompt_candidates_are_versioned_and_within_utf16_limit(
+    video_project_root: Path,
+) -> None:
+    expected = {
+        "motion-variation-v1.txt": 959,
+        "motion-variation-v2.txt": 985,
+        "motion-variation-v3.txt": 997,
+    }
+    for filename, units in expected.items():
+        text = (video_project_root / "prompts" / filename).read_text(encoding="utf-8")
+        assert len(text.encode("utf-16-le")) // 2 == units
+        assert units <= 1000
+
+
 def test_motion_variations_guard_budget_limit_and_zero_call_preview(video_project_root: Path, synthetic_video: Path) -> None:
     smoke_id, review = _passing_motion_smoke(video_project_root, synthetic_video)
     with pytest.raises(ExternalInputBlocked, match="cap exceeded"):
@@ -234,6 +248,50 @@ def test_incomplete_review_fails_before_motion_provider_submission(
                 preset="motion", action="motion_generate", live=True, keyframe_id="hero",
                 smoke_run_id=smoke_id, smoke_review_file=review, motion_variations=1,
                 max_runway_credits=25,
+            ),
+            provider=provider,
+            environ={"VIDEO_ALLOW_LIVE_CALLS": "true", "RUNWAYML_API_SECRET": "x"},
+        )
+    assert provider.submitted == []
+
+
+def test_owner_attestation_is_dry_run_only_and_preserves_blank_review(
+    video_project_root: Path, synthetic_video: Path
+) -> None:
+    smoke_id, review = _passing_motion_smoke(video_project_root, synthetic_video)
+    shutil.copyfile(video_project_root / "runs" / smoke_id / "review.csv", review)
+    preview = preview_motion_variations(
+        video_project_root,
+        VideoRunOptions(
+            preset="motion",
+            action="motion_generate",
+            keyframe_id="hero",
+            smoke_run_id=smoke_id,
+            smoke_review_file=review,
+            motion_variations=3,
+            max_runway_credits=75,
+            motion_smoke_qa_attested=True,
+        ),
+    )
+    assert preview.status == "DRY_RUN_COMPLETE"
+    assert preview.submission_count == 0
+    with review.open(newline="", encoding="utf-8") as source:
+        row = next(csv.DictReader(source))
+    assert all(row[field] == "" for field in QA_FIELDS[4:])
+    provider = FakeMotionProvider(synthetic_video)
+    with pytest.raises(ExternalInputBlocked, match="planning-only"):
+        generate_motion_variations(
+            video_project_root,
+            VideoRunOptions(
+                preset="motion",
+                action="motion_generate",
+                live=True,
+                keyframe_id="hero",
+                smoke_run_id=smoke_id,
+                smoke_review_file=review,
+                motion_variations=1,
+                max_runway_credits=25,
+                motion_smoke_qa_attested=True,
             ),
             provider=provider,
             environ={"VIDEO_ALLOW_LIVE_CALLS": "true", "RUNWAYML_API_SECRET": "x"},

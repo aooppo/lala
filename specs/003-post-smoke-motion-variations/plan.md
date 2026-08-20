@@ -28,3 +28,12 @@ preview, exact smoke bounds, modern and historical review schemas, complete bund
 Runway-only live submission. Run the full offline suite and `git diff --check`; do not run a paid
 provider call automatically. The real smoke run's review copy remains blank and therefore remains
 an intentional `BLOCKED_EXTERNAL` gate.
+
+## P1-2 planning checkpoint
+
+The owner-requested P1-2 design is captured in `p1-2-motion-variation-plan.md`, with exact prompt
+files under `prompts/motion-variation-v1.txt` through `v3.txt` and the derived schema in
+`contracts/p1-2-evidence-schema.md`. The dry-run uses an explicit planning-only
+`--motion-smoke-qa-attested` flag; it validates smoke/keyframe/output provenance, records the
+owner instruction without editing the review copy, plans three Runway requests at 75 credits, and
+submits zero calls. This flag is rejected by every Live path.

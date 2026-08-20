@@ -595,3 +595,21 @@
   existing evidence, with its recorded 1001-unit length preserved.
 - Verification: `uv run pytest` passed **193 tests**; no Runway, HeyGen, or other paid Provider
   call was attempted. v2 SHA-256 remains `27af6d0b902e98f94d816280deef6fdca7537d1eb1b3ea53d71bdf71d9e1f9f2`.
+
+## Goal 2 Checkpoint 15 — P1-2 controlled motion variation planning
+
+- Baseline Smoke `LALA-VIDEO-20260820-040258-MOTION-SMOKE-001` is treated as passed for this
+  planning task per the owner request. Its original `review.csv` and external copy remain blank,
+  byte-preserved, and immutable; the dry-run records `passed_by_owner_instruction` separately.
+- Added three versioned prompt candidates: `MOTION-VAR-001` breathing/blink/tiny-head (959 UTF-16,
+  low risk), `MOTION-VAR-002` decor gaze shift (985 UTF-16, low-medium risk), and `MOTION-VAR-003`
+  restrained one-hand presentation (997 UTF-16, medium risk). All retain the 5s/gen4_turbo/1280:720
+  invariants and explicit forbidden-motion list.
+- Dry-run: `LALA-VIDEO-20260820-041837-MOTION-GENERATE-001`, 3 planned Runway calls, estimated 75
+  credits / $0.75, `paid_calls: 0`; evidence is under
+  `outputs/broll/p1-2-motion-variation-plan-20260820-001/p1-2-dry-run.json`.
+- Verification: targeted motion suite **9 passed**; full offline suite **195 passed**; compileall,
+  `git diff --check`, configuration validation, and evidence JSON validation passed.
+- Recommendation: generate `MOTION-VAR-001` first; if only one 25-credit Live call is allowed,
+  choose the same candidate. P1-2 is not Live-ready until Owner approves the variation plan and
+  separately authorizes Live with exact permission and credentials. Paid calls in this checkpoint: 0.

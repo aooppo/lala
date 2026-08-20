@@ -613,3 +613,15 @@
 - Recommendation: generate `MOTION-VAR-001` first; if only one 25-credit Live call is allowed,
   choose the same candidate. P1-2 is not Live-ready until Owner approves the variation plan and
   separately authorizes Live with exact permission and credentials. Paid calls in this checkpoint: 0.
+
+## Goal 2 Checkpoint 16 — P1-1 v4 Camera-Lock candidate
+
+- The P1-1 v3 Motion Smoke `LALA-VIDEO-20260820-040258-MOTION-SMOKE-001` retained stable visual
+  identity, apparent age, and wardrobe, but external human review found camera/framing drift. It
+  is not human-QA approved.
+- Added `prompts/home-broll-v4.txt` as a Camera-Lock smoke candidate. It explicitly preserves the
+  source composition and pixel positions and prohibits global scene translation, camera drift, and
+  reframing. It is awaiting dry-run, one separately authorized live smoke, and human QA; it is not
+  approved, production-ready, or MTL-ready.
+- The v3 default, homepage establishing preset, P1-2 motion-variation prompts, and historical
+  prompt evidence remain unchanged. P1-2 remains blocked pending P1-1 v4 human QA.

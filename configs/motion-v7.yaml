@@ -1,0 +1,29 @@
+version: "1.0"
+candidates:
+  - candidate_id: v7-a-stability-first
+    prompt_file: prompts/p1-1-motion-v7-a-v1.txt
+    experiment_level: stability_first
+    motion_intent: Only subtle breathing and extremely minimal natural micro-motion.
+    provider: runway
+    model: gen4_turbo
+    duration_seconds: 5
+    ratio: "1280:720"
+    live_allowed: false
+  - candidate_id: v7-b-natural-micro-motion
+    prompt_file: prompts/p1-1-motion-v7-b-v1.txt
+    experiment_level: natural_micro_motion
+    motion_intent: Subtle breathing, an occasional natural blink, and extremely small head or facial micro-adjustments.
+    provider: runway
+    model: gen4_turbo
+    duration_seconds: 5
+    ratio: "1280:720"
+    live_allowed: false
+  - candidate_id: v7-c-controlled-upper-bound
+    prompt_file: prompts/p1-1-motion-v7-c-v1.txt
+    experiment_level: controlled_upper_bound
+    motion_intent: Restrained head and minor posture micro-adjustments within a static talking-shot range.
+    provider: runway
+    model: gen4_turbo
+    duration_seconds: 5
+    ratio: "1280:720"
+    live_allowed: false

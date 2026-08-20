@@ -721,3 +721,32 @@
   media/evidence scan and `git diff --check` passed.
 - Paid calls made in this checkpoint: **0**. Runway HTTP requests/tasks, HeyGen, voice, talking,
   assembly, promotion, and all other provider calls: **0**.
+
+## Goal 2 Checkpoint 20 — P1-1 Motion V7 targeted stability preparation
+
+- V6 remains the authoritative failed baseline: Camera Lock PASS, Framing FAIL, Identity PASS,
+  Eyes FAIL, Mouth PASS, Motion FAIL, and MTL Ready FAIL. The Subject Lock proxy result remains
+  11/11 tracked frames (100%), X/Y drift `-14.0/+10.0 px`, width/height change
+  `-8.641975%/-3.496503%`, maximum scale change `13.580247%`, and `OUTSIDE_THRESHOLD`.
+  It remains diagnostic evidence only, never automatic Human QA.
+- Added a V7 controlled A/B/C motion ladder: Stability First, Natural Micro Motion, and Controlled
+  Upper Bound. Each new versioned prompt keeps the camera, framing, identity, eyes, and background
+  locked while raising only the allowed natural micro-motion. Prompt UTF-16 units are 663, 716,
+  and 752, all strictly below 1,000. Historical V2/V3 prompts were not modified.
+- Added the dry-run-only `video motion-v7-dry-run` command, which has no `--live` option. It loads
+  the fixed `configs/motion-v7.yaml` matrix, rejects a live-enabled/malformed/overlong candidate
+  before run creation, and writes one normal 13-artifact planning bundle with three blank QA rows.
+  `LALA-VIDEO-20260820-065832-MOTION-V7-001` planned three `gen4_turbo` 5-second calls against
+  `pilot_home_context`, estimated 25 credits each / 75 total from configured pricing, and made zero
+  submissions, task IDs, provider constructions, or paid calls. Its V6 comparison records V7 and
+  delta values as `PENDING`; it does not fabricate a video, Subject Lock artifact, or review package.
+- The corrected V6 evidence labels remain: blank package review SHA-256
+  `c04e271773e31f81744f94602a9ed782b1a8b792bdbbdaa2e81c704a9b86fa31`; reviewed-copy SHA-256
+  `67ceedc5ce97a9436086fd6b4ff5a3cb8026bd56c68042ddcc4c56dd6eb7ab8e`.
+- P1-2 remains `Offline: ALLOWED`, `Dry-run: ALLOWED`, and `Live: BLOCKED` pending an explicit
+  P1-1 human pass with MTL readiness. V7 preparation and diagnostics do not change that gate.
+- Verification: V7 focused **6 passed**; V7 + Subject Lock/package + Motion Smoke + P1-2 focused
+  regression **34 passed**; `python -m compileall .` and full offline suite **213 passed**. Approved
+  anchor hashes, secret scan, run artifact inspection, and `git diff --check` passed.
+- Paid calls made in this checkpoint: **0**. Runway HTTP requests/tasks, HeyGen, voice, talking,
+  assembly, promotion, and all other provider calls: **0**.

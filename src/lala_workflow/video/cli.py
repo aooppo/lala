@@ -53,6 +53,13 @@ def configure_parser(subparsers: Any) -> None:
     _budgets(motion_smoke)
     _mode(motion_smoke)
 
+    motion_v7 = commands.add_parser(
+        "motion-v7-dry-run",
+        help="prepare the three-candidate P1-1 Motion V7 experiment without provider submission",
+    )
+    _project_root(motion_v7)
+    motion_v7.add_argument("--keyframe", required=True)
+
     motion_generate = commands.add_parser(
         "motion-generate", help="generate bounded Runway motion variations after a reviewed smoke"
     )

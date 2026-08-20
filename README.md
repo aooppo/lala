@@ -242,6 +242,31 @@ change the default, homepage establishing shot, or P1-2 motion-variation prompts
 older v1 and v2 prompts remain available for historical evidence; v2 is immutable and is not used
 for new requests. The homepage establishing shot remains configured to use v3.
 
+### P1-1 Motion V7 targeted stability preparation
+
+V7 is an offline-only controlled experiment for the V6 failures: Framing, Eyes, Motion, and the
+`OUTSIDE_THRESHOLD` Subject Lock result. It provides three distinct motion rungs: Stability First,
+Natural Micro Motion, and Controlled Upper Bound. The versioned V7 prompts preserve camera lock,
+framing, identity, gaze, and background while increasing only the bounded natural micro-motion.
+The stricter versioned filenames are `p1-1-motion-v7-a-v1.txt`, `p1-1-motion-v7-b-v1.txt`, and
+`p1-1-motion-v7-c-v1.txt`; each is validated below Runway's 1,000 UTF-16-unit limit.
+
+Prepare the single three-candidate review record locally:
+
+```bash
+uv run python -m lala_workflow video motion-v7-dry-run \
+  --keyframe pilot_home_context --project-root .
+```
+
+This command intentionally has no `--live` option. It writes three planned calls, estimator-derived
+credits, and three blank QA rows, but makes no provider construction, submission, task ID, or paid
+call. Its V6 comparison is diagnostic evidence only: V6 values are fixed and V7/delta values stay
+`PENDING` until a later real V7 video is analyzed. The V6 blank review SHA-256 remains
+`c04e271773e31f81744f94602a9ed782b1a8b792bdbbdaa2e81c704a9b86fa31`; its separately archived
+reviewed-copy SHA-256 remains `67ceedc5ce97a9436086fd6b4ff5a3cb8026bd56c68042ddcc4c56dd6eb7ab8e`.
+V7 readiness does not unlock P1-2 Live; explicit human P1-1 pass and MTL readiness are still
+required.
+
 ```bash
 export VIDEO_ALLOW_LIVE_CALLS=true
 export VIDEO_MOTION_LIVE_SMOKE_TEST=true

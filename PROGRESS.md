@@ -686,3 +686,35 @@
   compileall, `git diff --check`, package SHA-256 verification, ZIP integrity, and secret scan passed.
 - Paid calls made in this checkpoint: **1** (the single authorized Runway P1-1 v6 smoke). No
   P1-2, HeyGen, voice, talking, assembly, promotion, or other provider call was made.
+
+## Goal 2 Checkpoint 19 — Subject Lock diagnostics and P1-2 offline gate
+
+- V6 Owner QA was archived as `P1_1_V6_SMOKE_HUMAN_QA_FAILED`: Camera Lock PASS, Framing FAIL,
+  Identity PASS, Eyes FAIL, Mouth PASS, Motion FAIL, and MTL Ready FAIL. Technical execution
+  remains PASS while human visual acceptance is FAIL. The original run review remains blank and
+  byte-identical; the ignored reviewed copy records the Owner decision separately.
+- Added provider-neutral local Subject Lock diagnostics under `src/lala_workflow/video/qa/` with
+  configured thresholds in `configs/video-qa.yaml`. The bounded Pillow tracker measures the
+  dominant red-gown region as `color_region_proxy`; it does not claim face/full-body segmentation,
+  requires no network/model download, and returns `INSUFFICIENT_EVIDENCE` rather than zero drift
+  when tracking coverage or endpoints are inadequate.
+- Review-package integration produces `subject-lock.json`, `subject-trajectory.csv`, and
+  `subject-overlay.png`, recomputes sorted SHA-256 evidence, creates/verifies a deterministic ZIP,
+  scans text artifacts for secrets, and leaves media/review/run evidence unchanged. `video report`
+  presents diagnostic and human-QA status separately.
+- V6 offline result: 11/11 frames tracked (100%); first-to-last X/Y drift `-14.0/+10.0 px`, width/
+  height change `-8.641975%/-3.496503%`, maximum center distance `23.4094 px`, maximum scale change
+  `13.580247%`, diagnostic `OUTSIDE_THRESHOLD`. This is diagnostic evidence, not automatic human
+  QA, and does not make V6 MTL-ready.
+- P1-2 mode gate now permits provenance-validated offline/dry-run planning with a failing review
+  while retaining strict human PASS plus MTL readiness for Live before provider construction. The
+  canonical V6 three-candidate dry-run planned three calls and 75 credits, wrote three blank QA
+  rows, and produced zero submissions, task IDs, provider constructions, or paid calls.
+- Feature traceability lives in `specs/004-subject-lock-diagnostics/`. P1-2 state is
+  `Offline: ALLOWED`, `Dry-run: ALLOWED`, `Live: BLOCKED` pending P1-1 human pass.
+- Verification: compileall passed; Subject Lock/report **9 passed**; Motion Smoke **10 passed**;
+  P1-2 gate **11 passed**; full offline suite **207 passed**. V6 checksum/ZIP integrity and secret
+  scan passed; all five approved-anchor hashes match the Checkpoint 1 baseline; tracked runtime
+  media/evidence scan and `git diff --check` passed.
+- Paid calls made in this checkpoint: **0**. Runway HTTP requests/tasks, HeyGen, voice, talking,
+  assembly, promotion, and all other provider calls: **0**.

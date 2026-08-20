@@ -276,9 +276,31 @@ continue while P1-1 is unresolved. P1-2 live provider execution remains blocked 
 human-reviewed P1-1 copy explicitly passes and records `mtl_review_ready=true`; technical success
 or diagnostic evidence alone never opens the live gate.
 
-For the P1-2 planning checkpoint only, `motion-generate --dry-run` may add
-`--motion-smoke-qa-attested`. This records the owner's supplied Smoke-QA status without changing
-the blank review copy or authorizing Live; the flag is rejected on any Live invocation. The three
+Subject Lock diagnostics now quantify subject-proxy position and apparent scale independently
+from camera/background lock. They use a deterministic local `color_region_proxy` for Lady LaLa's
+red-gown region, require no network/model download, and produce `subject-lock.json`,
+`subject-trajectory.csv`, and `subject-overlay.png`. The configured thresholds in
+`configs/video-qa.yaml` classify only diagnostic evidence as `WITHIN_THRESHOLD`,
+`OUTSIDE_THRESHOLD`, or `INSUFFICIENT_EVIDENCE`; they never populate human QA or MTL readiness.
+
+To analyze and integrity-refresh an existing local Motion Smoke review package without any
+provider construction or call:
+
+```bash
+uv run python -m lala_workflow video subject-lock \
+  --run-id LALA-VIDEO-MOTION-SMOKE-... \
+  --package-dir outputs/review-packages/P1-1-MOTION-SMOKE-...
+```
+
+`video report` includes the diagnostic summary when exactly one matching package exists and
+reports the append-only run's human QA state separately. Prompt-only subject locking is not
+considered sufficient evidence for P1-1 acceptance; human review remains authoritative.
+
+For backward compatibility, `motion-generate --dry-run` may still accept
+`--motion-smoke-qa-attested`, but dry-run no longer interprets it or any review copy as a pass.
+Dry-run validates immutable smoke, output, keyframe, prompt, and review-copy provenance, records
+the observed human review state, and authorizes no Live work. The flag is rejected on any Live
+invocation. The three
 design candidates and exact prompt files are documented in
 `specs/003-post-smoke-motion-variations/p1-2-motion-variation-plan.md`.
 

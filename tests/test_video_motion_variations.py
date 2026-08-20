@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+import lala_workflow.video.runner as runner_module
+
 from lala_workflow.video.runner import (
     VideoRunOptions,
     generate_motion_variations,
@@ -318,3 +320,65 @@ def test_prompt_drift_fails_before_motion_provider_submission(
             environ={"VIDEO_ALLOW_LIVE_CALLS": "true", "RUNWAYML_API_SECRET": "x"},
         )
     assert provider.submitted == []
+
+
+def test_p1_2_dry_run_allowed_when_p1_1_failed(
+    video_project_root: Path, synthetic_video: Path
+) -> None:
+    smoke_id, review = _passing_motion_smoke(video_project_root, synthetic_video)
+    with review.open(newline="", encoding="utf-8") as source:
+        row = next(csv.DictReader(source))
+    row.update({"eyes": "false", "motion": "false", "mtl_review_ready": "false"})
+    with review.open("w", newline="", encoding="utf-8") as output:
+        writer = csv.DictWriter(output, fieldnames=QA_FIELDS)
+        writer.writeheader()
+        writer.writerow(row)
+
+    outcome = preview_motion_variations(
+        video_project_root,
+        VideoRunOptions(
+            preset="motion", action="motion_generate", keyframe_id="hero",
+            smoke_run_id=smoke_id, smoke_review_file=review, motion_variations=3,
+            max_runway_credits=75,
+        ),
+    )
+    request = json.loads((outcome.run_dir / "request.json").read_text())
+    results = json.loads((outcome.run_dir / "provider-results.json").read_text())
+    assert outcome.status == "DRY_RUN_COMPLETE"
+    assert outcome.provider_call_count == 3
+    assert outcome.submission_count == 0
+    assert request["motion_smoke_review"]["status"] == "HUMAN_QA_FAILED"
+    assert request["motion_smoke_review"]["live_authorized"] is False
+    assert results["submission_count"] == 0
+    assert results["results"] == []
+    with (outcome.run_dir / "review.csv").open(newline="", encoding="utf-8") as source:
+        rows = list(csv.DictReader(source))
+    assert len(rows) == 3
+    assert all(all(row[field] == "" for field in QA_FIELDS[4:]) for row in rows)
+
+
+def test_p1_2_live_blocked_when_p1_1_failed_before_provider_construction(
+    video_project_root: Path, synthetic_video: Path, monkeypatch
+) -> None:
+    smoke_id, review = _passing_motion_smoke(video_project_root, synthetic_video)
+    with review.open(newline="", encoding="utf-8") as source:
+        row = next(csv.DictReader(source))
+    row.update({"eyes": "false", "motion": "false", "mtl_review_ready": "false"})
+    with review.open("w", newline="", encoding="utf-8") as output:
+        writer = csv.DictWriter(output, fieldnames=QA_FIELDS)
+        writer.writeheader()
+        writer.writerow(row)
+    constructions = []
+    monkeypatch.setattr(runner_module, "_create_motion_provider", lambda *_args, **_kwargs: constructions.append(True))
+
+    with pytest.raises(ExternalInputBlocked, match="incomplete or failing|explicitly approved"):
+        generate_motion_variations(
+            video_project_root,
+            VideoRunOptions(
+                preset="motion", action="motion_generate", live=True, keyframe_id="hero",
+                smoke_run_id=smoke_id, smoke_review_file=review, motion_variations=3,
+                max_runway_credits=75,
+            ),
+            environ={"VIDEO_ALLOW_LIVE_CALLS": "true", "RUNWAYML_API_SECRET": "fixture-only"},
+        )
+    assert constructions == []

@@ -102,6 +102,13 @@ def configure_parser(subparsers: Any) -> None:
     _project_root(report)
     report.add_argument("--run-id", required=True)
 
+    subject_lock = commands.add_parser(
+        "subject-lock", help="build offline subject-lock diagnostics for a motion review package"
+    )
+    _project_root(subject_lock)
+    subject_lock.add_argument("--run-id", required=True)
+    subject_lock.add_argument("--package-dir", required=True)
+
     promote = commands.add_parser("promote", help="promote a reviewed final candidate")
     _project_root(promote)
     promote.add_argument("--run-id", required=True)

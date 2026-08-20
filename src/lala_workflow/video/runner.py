@@ -258,7 +258,7 @@ def run_motion_smoke(
         raise VideoConfigError(
             f"motion variations must be within 1..{config.limits.max_motion_variations_per_shot}"
         )
-    prompt = load_video_prompt(config.root, Path("prompts/home-broll-v1.txt"))
+    prompt = _resolve_motion_prompt(config, options.motion_prompt)
     planned_requests = tuple(
         PlannedRequest(
             request_id=f"motion-smoke-pilot-v{index:03d}",
@@ -654,6 +654,8 @@ def _motion_smoke_cost(
         "voice_cost": None,
         "talking_video_cost": None,
         "motion_video_cost": amount,
+        "estimated_runway_credits": estimated_credits,
+        "actual_runway_credits": actual_credits,
         "editing_cost": 0,
         "storage_cost": None,
         "total_provider_cost": amount,
@@ -1465,13 +1467,13 @@ def _write_motion_failure_bundle(config: VideoProjectConfig, options: VideoRunOp
 
 
 def _resolve_motion_prompt(config: VideoProjectConfig, selected: str | None) -> ResolvedPrompt:
-    if selected:
-        return load_video_prompt(config.root, Path(selected))
-    for preset in config.presets.values():
-        for shot in preset.shots:
-            if shot.kind == "motion" and shot.prompt_file is not None:
-                return load_video_prompt(config.root, shot.prompt_file)
-    raise ExternalInputBlocked("no versioned motion prompt is configured")
+    # Motion Smoke has a stable historical default independent of any preset's
+    # current creative prompt. Variations never call this fallback: they read
+    # the reviewed smoke's recorded prompt provenance instead.
+    return load_video_prompt(
+        config.root,
+        Path(selected) if selected else Path("prompts/home-broll-v1.txt"),
+    )
 
 
 def _validate_motion_provider_settings(config: VideoProjectConfig, model: str, duration: int, ratio: str, prompt: ResolvedPrompt) -> None:
@@ -2193,10 +2195,14 @@ def handle_video_command(args: Any) -> tuple[int, Any]:
         options = VideoRunOptions(
             preset="motion_smoke",
             action="motion_smoke",
-            motion_variations=args.variations,
             keyframe_id=args.keyframe,
             live=bool(args.live),
             provider_name="runway",
+            motion_model=args.model,
+            motion_duration=args.duration,
+            motion_ratio=args.ratio,
+            motion_variations=args.variations,
+            motion_prompt=args.prompt,
             max_provider_cost_usd=args.max_provider_cost_usd,
             max_runway_credits=args.max_runway_credits,
             accept_unknown_provider_cost=bool(args.accept_unknown_provider_cost),
@@ -2204,9 +2210,6 @@ def handle_video_command(args: Any) -> tuple[int, Any]:
         outcome = run_motion_smoke(
             args.project_root,
             options,
-            model=args.model,
-            duration_seconds=args.duration,
-            ratio=args.ratio,
         )
         return (0 if outcome.status in {"DRY_RUN_COMPLETE", "SUCCEEDED"} else 3), {
             "run_id": outcome.run_id,
@@ -2214,6 +2217,9 @@ def handle_video_command(args: Any) -> tuple[int, Any]:
             "status": outcome.status,
             "planned_provider_calls": outcome.provider_call_count,
             "paid_calls": outcome.submission_count,
+            "prompt_path": str(outcome.plan.shots[0].prompt.path)
+            if outcome.plan.shots and outcome.plan.shots[0].prompt
+            else None,
         }
     if args.video_command in {"talking-smoke-test", "generate"}:
         options = VideoRunOptions(
@@ -2283,28 +2289,22 @@ def handle_video_command(args: Any) -> tuple[int, Any]:
             "planned_provider_calls": outcome.provider_call_count,
             "paid_calls": outcome.submission_count,
         }
-    if args.video_command in {"motion-smoke-test", "motion-generate"}:
-        is_smoke = args.video_command == "motion-smoke-test"
+    if args.video_command == "motion-generate":
         options = VideoRunOptions(
             preset="motion",
-            action="motion_smoke" if is_smoke else "motion_generate",
+            action="motion_generate",
             keyframe_id=args.keyframe,
             live=bool(args.live),
             motion_model=args.model,
             motion_duration=args.duration,
             motion_ratio=args.ratio,
-            motion_variations=1 if is_smoke else args.variations,
+            motion_variations=args.variations,
             max_runway_credits=args.max_runway_credits,
             motion_prompt=getattr(args, "prompt", None),
             smoke_run_id=getattr(args, "motion_smoke_run_id", None),
             smoke_review_file=(Path(args.motion_smoke_review_file) if getattr(args, "motion_smoke_review_file", None) else None),
         )
-        if is_smoke:
-            if args.live:
-                outcome = run_motion_smoke(args.project_root, options)
-            else:
-                outcome = preview_motion_smoke(args.project_root, options)
-        elif args.live:
+        if args.live:
             outcome = generate_motion_variations(args.project_root, options)
         else:
             outcome = preview_motion_variations(args.project_root, options)

@@ -1,0 +1,9 @@
+Single continuous five-second shot with a completely locked-off camera.
+
+Lady LaLa remains stationary in the exact same position and at the exact same scale as in the source image. She stays fully visible from head to toe for the entire shot. Preserve her exact facial identity, apparent age, hairstyle, body proportions, red gown, necklace, earrings, room decor, color palette, and lighting.
+
+Motion is limited to subtle natural breathing, one gentle natural blink, and barely perceptible movement in the dress fabric and nearby plant leaves. Her feet remain fixed. The opening and final compositions remain consistent with the source image.
+
+Lady LaLa does not walk, step, lean toward the camera, turn away, gesture, speak, move her lips, approach the camera, leave the frame, or become cropped. No camera pan, tilt, tracking, orbit, dolly, push-in, pull-out, zoom, reframing, focus pull, scene transition, or handheld motion.
+
+Do not add people, products, objects, text, logos, or new decorations.

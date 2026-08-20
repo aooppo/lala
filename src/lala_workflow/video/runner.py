@@ -38,7 +38,7 @@ from .execution import (
     validate_live_smoke_guards,
 )
 from .planning import build_shot_plan
-from .prompts import VideoPromptError, load_video_prompt
+from .prompts import VideoPromptError, load_video_prompt, utf16_code_units
 from .reporting import blank_review_rows, read_video_summary, summary_markdown
 from .review import ReviewError, load_external_review_row
 from .storage import QA_FIELDS, VideoRunContext, VideoRunStorage
@@ -61,6 +61,7 @@ class VideoRunOptions:
     smoke_review_file: Path | None = None
     motion_smoke_run_id: str | None = None
     motion_smoke_review_file: Path | None = None
+    motion_smoke_qa_attested: bool = False
     provider_name: str | None = None
     max_provider_cost_usd: float | None = None
     max_runway_credits: float | None = None
@@ -88,7 +89,8 @@ def validate_video_project(project_root: Path) -> dict[str, Any]:
         script = _script(config, preset.script_id)
         if script.script_id in config.voice_profile.script_audio:
             resolve_approved_audio(config, script)
-        build_shot_plan(config, preset.name)
+        plan = build_shot_plan(config, preset.name)
+        _validate_motion_plan_prompts(config, plan)
     if shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None:
         raise VideoConfigError("FFmpeg and FFprobe are required for video workflows")
     return {
@@ -131,6 +133,7 @@ def preview_video(project_root: Path, options: VideoRunOptions) -> VideoRunOutco
         talking_variations=options.talking_variations,
         motion_variations=options.motion_variations,
     )
+    _validate_motion_plan_prompts(config, plan)
     cost = estimate_plan_cost(
         plan,
         config,
@@ -258,7 +261,10 @@ def run_motion_smoke(
         raise VideoConfigError(
             f"motion variations must be within 1..{config.limits.max_motion_variations_per_shot}"
         )
-    prompt = load_video_prompt(config.root, Path("prompts/home-broll-v1.txt"))
+    prompt = _resolve_motion_prompt(config, options.motion_prompt)
+    _validate_motion_provider_settings(
+        config, model, duration_seconds, ratio, prompt
+    )
     planned_requests = tuple(
         PlannedRequest(
             request_id=f"motion-smoke-pilot-v{index:03d}",
@@ -654,6 +660,8 @@ def _motion_smoke_cost(
         "voice_cost": None,
         "talking_video_cost": None,
         "motion_video_cost": amount,
+        "estimated_runway_credits": estimated_credits,
+        "actual_runway_credits": actual_credits,
         "editing_cost": 0,
         "storage_cost": None,
         "total_provider_cost": amount,
@@ -1253,6 +1261,10 @@ def generate_motion_variations(
     """Generate 1..N Runway-only variations unlocked by a reviewed motion smoke."""
     if options.action != "motion_generate":
         raise ValueError("generate_motion_variations requires a motion_generate option")
+    if options.motion_smoke_qa_attested:
+        raise ExternalInputBlocked(
+            "--motion-smoke-qa-attested is planning-only and cannot authorize Live generation"
+        )
     environment = os.environ if environ is None else environ
     config = load_video_config(project_root, require_inputs=False)
     keyframe = _keyframe(config, options.keyframe_id)
@@ -1266,7 +1278,8 @@ def generate_motion_variations(
     duration = options.motion_duration if options.motion_duration is not None else 5
     ratio = options.motion_ratio or "1280:720"
     smoke, review_evidence = _validate_passing_motion_variation_smoke(
-        config.root, options.smoke_run_id, options.smoke_review_file
+        config.root, options.smoke_run_id, options.smoke_review_file,
+        allow_owner_attestation=False,
     )
     smoke_request = _first_motion_request(smoke)
     if (smoke_request.get("keyframe_sha256") or smoke_request.get("image_sha256")) != keyframe.sha256:
@@ -1331,7 +1344,8 @@ def preview_motion_variations(
             f"{config.limits.max_motion_variations_per_shot}"
         )
     smoke, review_evidence = _validate_passing_motion_variation_smoke(
-        config.root, options.smoke_run_id, options.smoke_review_file
+        config.root, options.smoke_run_id, options.smoke_review_file,
+        allow_owner_attestation=options.motion_smoke_qa_attested,
     )
     smoke_request = _first_motion_request(smoke)
     if (smoke_request.get("keyframe_sha256") or smoke_request.get("image_sha256")) != keyframe.sha256:
@@ -1465,13 +1479,13 @@ def _write_motion_failure_bundle(config: VideoProjectConfig, options: VideoRunOp
 
 
 def _resolve_motion_prompt(config: VideoProjectConfig, selected: str | None) -> ResolvedPrompt:
-    if selected:
-        return load_video_prompt(config.root, Path(selected))
-    for preset in config.presets.values():
-        for shot in preset.shots:
-            if shot.kind == "motion" and shot.prompt_file is not None:
-                return load_video_prompt(config.root, shot.prompt_file)
-    raise ExternalInputBlocked("no versioned motion prompt is configured")
+    # Motion Smoke has a stable default independent of any preset's current
+    # creative prompt. Variations never call this fallback: they read the
+    # reviewed smoke's recorded prompt provenance instead.
+    return load_video_prompt(
+        config.root,
+        Path(selected) if selected else Path("prompts/home-broll-v3.txt"),
+    )
 
 
 def _validate_motion_provider_settings(config: VideoProjectConfig, model: str, duration: int, ratio: str, prompt: ResolvedPrompt) -> None:
@@ -1488,6 +1502,35 @@ def _validate_motion_provider_settings(config: VideoProjectConfig, model: str, d
         raise VideoConfigError(f"unsupported Runway motion ratio: {ratio}")
     if capability.get("prompt_required") is True and not prompt.text.strip():
         raise VideoConfigError(f"Runway model {model} requires a prompt")
+    prompt_limit = int(
+        capability.get("prompt_utf16_max")
+        or settings.get("prompt_utf16_max")
+        or 1000
+    )
+    prompt_units = utf16_code_units(prompt.text)
+    if prompt_units > prompt_limit:
+        raise VideoConfigError(
+            "Runway motion prompt exceeds the UTF-16 character limit "
+            f"({prompt_units} > {prompt_limit})"
+        )
+
+
+def _validate_motion_plan_prompts(config: VideoProjectConfig, plan: ShotPlan) -> None:
+    """Validate planned Runway prompts before constructing any provider client."""
+
+    for shot in plan.shots:
+        if shot.kind != "motion" or shot.prompt is None:
+            continue
+        for planned in shot.requests:
+            if planned.responsibility != "motion" or planned.duration_seconds is None:
+                continue
+            _validate_motion_provider_settings(
+                config,
+                planned.model,
+                int(planned.duration_seconds),
+                plan.resolution,
+                shot.prompt,
+            )
 
 
 def _motion_credit_estimate(config: VideoProjectConfig, model: str, duration: int, variations: int) -> float | None:
@@ -1533,7 +1576,13 @@ def _create_motion_provider(config: VideoProjectConfig, environment: Mapping[str
     return RunwayMotionProvider(config.providers["runway"], api_key=str(environment["RUNWAYML_API_SECRET"]))
 
 
-def _validate_passing_motion_variation_smoke(project_root: Path, run_id: str | None, review_file: Path | None) -> tuple[dict[str, Any], dict[str, str]]:
+def _validate_passing_motion_variation_smoke(
+    project_root: Path,
+    run_id: str | None,
+    review_file: Path | None,
+    *,
+    allow_owner_attestation: bool = False,
+) -> tuple[dict[str, Any], dict[str, Any]]:
     if not run_id or "/" in run_id or "\\" in run_id:
         raise ExternalInputBlocked("motion generation requires a reviewed passing --motion-smoke-run-id")
     run_dir = (project_root / "runs" / run_id).resolve()
@@ -1568,6 +1617,11 @@ def _validate_passing_motion_variation_smoke(project_root: Path, run_id: str | N
         raise ExternalInputBlocked("motion smoke output provenance is missing")
     if review_file is None:
         raise ExternalInputBlocked("motion generation requires an immutable --motion-smoke-review-file")
+    if allow_owner_attestation:
+        evidence = _validate_owner_motion_qa_attestation(
+            project_root, run_dir, candidate, review_file
+        )
+        return request, evidence
     try:
         row, evidence = _load_motion_review_copy(project_root, run_dir, candidate, review_file)
     except ReviewError as exc:
@@ -1594,6 +1648,64 @@ def _validate_passing_motion_variation_smoke(project_root: Path, run_id: str | N
     if sha256_file(source_path) != artifact.get("sha256"):
         raise ExternalInputBlocked("motion smoke output hash no longer matches evidence")
     return request, evidence
+
+
+def _validate_owner_motion_qa_attestation(
+    project_root: Path,
+    run_dir: Path,
+    candidate: str,
+    review_file: Path | None,
+) -> dict[str, Any]:
+    """Validate planning-only owner attestation without manufacturing QA fields."""
+
+    if review_file is None:
+        raise ExternalInputBlocked(
+            "owner-attested motion planning requires an immutable --motion-smoke-review-file"
+        )
+    root = project_root.resolve()
+    path = review_file if review_file.is_absolute() else root / review_file
+    path = path.resolve()
+    reviews_root = (root / "outputs/reviews").resolve()
+    if reviews_root not in path.parents or not path.is_file():
+        raise ExternalInputBlocked("review file must be an existing copy under outputs/reviews")
+    baseline_path = run_dir / "review.csv"
+    try:
+        with baseline_path.open(newline="", encoding="utf-8") as source:
+            baseline_reader = csv.DictReader(source)
+            baseline_fields = baseline_reader.fieldnames or []
+            baseline_rows = [
+                dict(row) for row in baseline_reader if row.get("candidate") == candidate
+            ]
+        with path.open(newline="", encoding="utf-8") as source:
+            reader = csv.DictReader(source)
+            fields = reader.fieldnames or []
+            rows = [dict(row) for row in reader if row.get("candidate") == candidate]
+    except (OSError, UnicodeDecodeError, csv.Error) as exc:
+        raise ExternalInputBlocked("motion review CSV is unreadable") from exc
+    if len(baseline_rows) != 1 or len(rows) != 1 or fields != baseline_fields:
+        raise ExternalInputBlocked("owner-attested motion review provenance is invalid")
+    baseline = baseline_rows[0]
+    row = rows[0]
+    for field in ("run_id", "video_id", "preset", "candidate"):
+        if row.get(field) != baseline.get(field):
+            raise ExternalInputBlocked(
+                f"owner-attested motion review provenance mismatch: {field}"
+            )
+    human_fields = [
+        field
+        for field in baseline_fields
+        if field not in {"run_id", "video_id", "preset", "candidate"}
+    ]
+    if any(str(baseline.get(field) or "").strip() for field in human_fields):
+        raise ExternalInputBlocked(
+            "run motion review human fields must remain blank append-only evidence"
+        )
+    return {
+        "path": path.relative_to(root).as_posix(),
+        "sha256": sha256_file(path),
+        "status": "passed_by_owner_instruction",
+        "source_review_copy_unchanged": True,
+    }
 
 
 def _load_motion_review_copy(project_root: Path, run_dir: Path, candidate: str, review_file: Path) -> tuple[dict[str, str], dict[str, str]]:
@@ -1703,6 +1815,7 @@ def generate_video(
         talking_variations=options.talking_variations,
         motion_variations=options.motion_variations,
     )
+    _validate_motion_plan_prompts(config, plan)
     smoke, smoke_review_evidence = _validate_passing_smoke(
         config.root, options.smoke_run_id, options.smoke_review_file
     )
@@ -2193,10 +2306,14 @@ def handle_video_command(args: Any) -> tuple[int, Any]:
         options = VideoRunOptions(
             preset="motion_smoke",
             action="motion_smoke",
-            motion_variations=args.variations,
             keyframe_id=args.keyframe,
             live=bool(args.live),
             provider_name="runway",
+            motion_model=args.model,
+            motion_duration=args.duration,
+            motion_ratio=args.ratio,
+            motion_variations=args.variations,
+            motion_prompt=args.prompt,
             max_provider_cost_usd=args.max_provider_cost_usd,
             max_runway_credits=args.max_runway_credits,
             accept_unknown_provider_cost=bool(args.accept_unknown_provider_cost),
@@ -2204,9 +2321,6 @@ def handle_video_command(args: Any) -> tuple[int, Any]:
         outcome = run_motion_smoke(
             args.project_root,
             options,
-            model=args.model,
-            duration_seconds=args.duration,
-            ratio=args.ratio,
         )
         return (0 if outcome.status in {"DRY_RUN_COMPLETE", "SUCCEEDED"} else 3), {
             "run_id": outcome.run_id,
@@ -2214,6 +2328,9 @@ def handle_video_command(args: Any) -> tuple[int, Any]:
             "status": outcome.status,
             "planned_provider_calls": outcome.provider_call_count,
             "paid_calls": outcome.submission_count,
+            "prompt_path": str(outcome.plan.shots[0].prompt.path)
+            if outcome.plan.shots and outcome.plan.shots[0].prompt
+            else None,
         }
     if args.video_command in {"talking-smoke-test", "generate"}:
         options = VideoRunOptions(
@@ -2283,28 +2400,23 @@ def handle_video_command(args: Any) -> tuple[int, Any]:
             "planned_provider_calls": outcome.provider_call_count,
             "paid_calls": outcome.submission_count,
         }
-    if args.video_command in {"motion-smoke-test", "motion-generate"}:
-        is_smoke = args.video_command == "motion-smoke-test"
+    if args.video_command == "motion-generate":
         options = VideoRunOptions(
             preset="motion",
-            action="motion_smoke" if is_smoke else "motion_generate",
+            action="motion_generate",
             keyframe_id=args.keyframe,
             live=bool(args.live),
             motion_model=args.model,
             motion_duration=args.duration,
             motion_ratio=args.ratio,
-            motion_variations=1 if is_smoke else args.variations,
+            motion_variations=args.variations,
             max_runway_credits=args.max_runway_credits,
             motion_prompt=getattr(args, "prompt", None),
             smoke_run_id=getattr(args, "motion_smoke_run_id", None),
             smoke_review_file=(Path(args.motion_smoke_review_file) if getattr(args, "motion_smoke_review_file", None) else None),
+            motion_smoke_qa_attested=bool(getattr(args, "motion_smoke_qa_attested", False)),
         )
-        if is_smoke:
-            if args.live:
-                outcome = run_motion_smoke(args.project_root, options)
-            else:
-                outcome = preview_motion_smoke(args.project_root, options)
-        elif args.live:
+        if args.live:
             outcome = generate_motion_variations(args.project_root, options)
         else:
             outcome = preview_motion_variations(args.project_root, options)

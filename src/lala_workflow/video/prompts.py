@@ -14,6 +14,12 @@ class VideoPromptError(ValueError):
     pass
 
 
+def utf16_code_units(text: str) -> int:
+    """Return the length used by provider APIs that count UTF-16 units."""
+
+    return len(text.encode("utf-16-le")) // 2
+
+
 def load_video_prompt(project_root: Path, relative_path: Path) -> ResolvedPrompt:
     if relative_path.is_absolute() or not relative_path.as_posix():
         raise VideoPromptError("video prompt path must be project-relative")

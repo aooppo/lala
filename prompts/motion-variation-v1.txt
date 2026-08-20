@@ -1,0 +1,9 @@
+One continuous five-second shot with a completely locked-off camera.
+
+Use the approved Motion Smoke keyframe as the sole visual source. Keep Lady LaLa stationary at the source position and scale, fully visible head to toe. Preserve facial identity, apparent age, hairstyle, body proportions, red gown, necklace, earrings, room decor, color palette, lighting, and framing.
+
+Animate only slow subtle breathing, one gentle natural blink, and a tiny head movement of a few degrees that returns to the starting orientation. Keep feet fixed, torso and shoulders stable, and opening/final compositions consistent with the source.
+
+No walking, stepping, leaning, turning away, gesturing, speaking, lip movement, approach to camera, leaving frame, or cropping. No large body rotation, pan, tilt, tracking, orbit, dolly, push-in, pull-out, zoom, reframing, focus pull, transition, or handheld motion.
+
+Do not add people, products, objects, text, logos, or decorations.

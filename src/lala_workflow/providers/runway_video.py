@@ -14,6 +14,7 @@ from ..video.domain import (
     VideoTaskStatus,
 )
 from ..video.downloads import Downloader, download_video
+from ..video.prompts import utf16_code_units
 from .base import ProviderSubmissionError, ProviderTaskError, ProviderValidationError
 
 
@@ -66,6 +67,17 @@ class RunwayMotionProvider:
             )
         if model.get("prompt_required") is True and not request.prompt_text.strip():
             raise ProviderValidationError(f"Runway model {request.model} requires a prompt")
+        prompt_limit = int(
+            model.get("prompt_utf16_max")
+            or self.settings.get("prompt_utf16_max")
+            or 1000
+        )
+        prompt_units = utf16_code_units(request.prompt_text)
+        if prompt_units > prompt_limit:
+            raise ProviderValidationError(
+                "Runway motion prompt exceeds the UTF-16 character limit "
+                f"({prompt_units} > {prompt_limit})"
+            )
         if not request.image_path.is_file() or sha256_file(request.image_path) != request.image_sha256:
             raise ProviderValidationError("Runway motion image hash does not match approved source")
         if not request.prompt_path.is_file() or sha256_file(request.prompt_path) != request.prompt_sha256:

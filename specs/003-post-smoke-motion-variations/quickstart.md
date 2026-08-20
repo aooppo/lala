@@ -9,3 +9,7 @@
    additional variations; never exceed five.
 4. Only after owner authorization, exact video permission, credentials, and reviewed evidence use
    `--live`; select preferred downloaded variations from the generated blank QA sheet.
+
+For the current owner-attested planning checkpoint, add
+`--motion-smoke-qa-attested` to the dry-run command. It records the attestation and preserves the
+blank review copy; it is rejected on Live generation.

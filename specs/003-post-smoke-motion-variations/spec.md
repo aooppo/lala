@@ -2,12 +2,18 @@
 
 **Feature Branch**: `feat/post-smoke-motion-variations`
 **Feature Directory**: `003-post-smoke-motion-variations`
-**Status**: Offline implementation complete; live variation path remains review-gated
+**Status**: Offline implementation complete; P1-2 variation design/dry-run complete; live
+variation path remains owner-review and authorization-gated
 
 The one-result motion smoke and the post-smoke variation stage are separate workflow stages.
 Smoke establishes technical/provider evidence; post-smoke generation is unlocked only by an
 immutable external review copy containing explicit human decisions. The system never fills those
 decisions automatically.
+
+P1-2 planning may define versioned prompt candidates for controlled motion deltas, but those
+candidate prompts are not submitted by the current `motion-generate` path until the Owner approves
+the plan. The accepted smoke provenance remains `prompts/home-broll-v3.txt`; planning evidence
+records the owner-attested QA state without changing the blank source review row.
 
 ## User Scenarios & Testing
 
@@ -50,6 +56,10 @@ approved keyframe and smoke prompt after a successful motion smoke and explicit 
   schema only when its provenance fields match the smoke run and its supported motion decisions are
   explicit; an unknown or ambiguous schema MUST fail closed. The current unified QA schema remains
   strict and is not weakened for other video workflows.
+- **FR-009**: P1-2 planning MUST record three ordered motion candidates (breathing/blink/head,
+  gaze shift, one-hand presentation), exact versioned prompt paths and UTF-16 counts, identity and
+  framing invariants, per-candidate risk/acceptance criteria, and a zero-submission budget/evidence
+  record. Planning-only owner QA attestation MUST NOT authorize Live generation.
 
 ## Success Criteria
 

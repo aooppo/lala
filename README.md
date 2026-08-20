@@ -227,6 +227,21 @@ uv run python -m lala_workflow video talking-smoke-test \
 Motion smoke is a separate Runway-only stage. Its live boundary is fixed at one `gen4_turbo`
 result, exactly five seconds, and no more than 25 Runway credits:
 
+Motion Smoke defaults to the bounded `prompts/home-broll-v3.txt`. v3 uses a locked-off camera,
+keeps Lady LaLa stationary and fully visible, and stays within Runway's 1000 UTF-16-unit prompt
+limit. Its external P1-1 review found camera/framing drift despite stable identity, age, and
+wardrobe, so it is not human-QA approved. The v4 smoke solved camera/framing drift and retained
+identity stability, but human QA failed eyes, mouth, and motion; it is not MTL-ready.
+The v5 eye/mouth strategy corrected the prolonged eye closure and mouth opening, but external
+review found global camera/framing translation, so v5 is not MTL-ready. `prompts/home-broll-v6.txt`
+combines v4's pixel-position camera lock with v5's eye/mouth/subject lock. Its technical execution
+succeeded, but Owner review failed framing, eyes, motion, and MTL readiness while passing camera
+lock, identity, and mouth. Its archived status is `P1_1_V6_SMOKE_HUMAN_QA_FAILED`; P1-1 has not
+passed. Prompt-only subject locking is not sufficient evidence for P1-1 acceptance. It does not
+change the default, homepage establishing shot, or P1-2 motion-variation prompts. The
+older v1 and v2 prompts remain available for historical evidence; v2 is immutable and is not used
+for new requests. The homepage establishing shot remains configured to use v3.
+
 ```bash
 export VIDEO_ALLOW_LIVE_CALLS=true
 export VIDEO_MOTION_LIVE_SMOKE_TEST=true
@@ -255,6 +270,17 @@ uv run python -m lala_workflow video motion-generate \
 Every invocation writes the standard thirteen-artifact append-only bundle and blank `review.csv`.
 Use `--dry-run` to validate the same smoke/review/hash/cap/variation gates with zero provider
 submissions.
+
+P1-2 planning, prompt loading, shot-plan and budget construction, offline tests, and dry-runs may
+continue while P1-1 is unresolved. P1-2 live provider execution remains blocked until a separate
+human-reviewed P1-1 copy explicitly passes and records `mtl_review_ready=true`; technical success
+or diagnostic evidence alone never opens the live gate.
+
+For the P1-2 planning checkpoint only, `motion-generate --dry-run` may add
+`--motion-smoke-qa-attested`. This records the owner's supplied Smoke-QA status without changing
+the blank review copy or authorizing Live; the flag is rejected on any Live invocation. The three
+design candidates and exact prompt files are documented in
+`specs/003-post-smoke-motion-variations/p1-2-motion-variation-plan.md`.
 
 Mode B uses the same `HEYGEN_API_KEY` only when `configs/voice-profile.yaml` identifies an
 explicitly approved `heygen_voice` / `starfish` private voice ID. Exact script bytes are submitted

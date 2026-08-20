@@ -84,12 +84,14 @@ providers:
         durations: [2, 3, 4, 5, 6, 7, 8, 9, 10]
         ratios: ["1280:720"]
         prompt_required: false
+        prompt_utf16_max: 1000
         max_prompt_image_data_uri_bytes: 5242880
         credits_per_second: 5
       gen4.5:
         durations: [2, 3, 4, 5, 6, 7, 8, 9, 10]
         ratios: ["1280:720"]
         prompt_required: true
+        prompt_utf16_max: 1000
         max_prompt_image_data_uri_bytes: 5242880
         credits_per_second: 12
     credit_usd: 0.01

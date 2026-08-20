@@ -564,3 +564,125 @@
   blank-review zero-call behavior, and complete bundles.
 - New paid calls in this task: 0. The smoke dry-run completed with one planned provider call and
   zero paid calls; synthetic reviewed variation dry-runs also use zero submissions.
+
+## Goal 2 Checkpoint 13 — Motion smoke visual rejection and subject-lock prompt revision
+
+- External review copy `outputs/reviews/LALA-VIDEO-20260819-154007-MOTION-SMOKE-001-review.csv`
+  records the supplied visual QA decision: identity, face, age, eyes, motion, and MTL readiness
+  failed; hair, body proportions, wardrobe, jewelry, background, and technical export passed.
+  The original run `review.csv` remains blank and unchanged. Reviewer and review time remain blank
+  because the supplied document did not provide those human fields.
+- The rejected smoke showed Lady LaLa walking toward the foreground-left, becoming blurred/cropped,
+  and leaving the frame. No post-smoke variations were generated and no `mtl_review_ready` approval
+  was recorded.
+- Added `prompts/home-broll-v2.txt` with a stationary, fully visible subject, locked camera, and
+  explicitly prohibited walking, reframing, cropping, lip movement, and scene transitions. Motion
+  Smoke remains backward-compatible with the v1 default; the corrected smoke selects v2 explicitly,
+  while the homepage establishing shot uses v2 in its preset configuration.
+- Verification: `uv run python -m compileall -q src tests`; `uv run pytest -q` (**190 passed**);
+  the prescribed v2 Motion Smoke dry-run completed with one planned provider call and
+  `submission_count=0`, using the v2 prompt hash. No live provider call was attempted.
+- Paid calls made in this checkpoint: **0**. A new live Smoke remains conditional on explicit
+  owner authorization, exact video smoke flags, valid Runway credentials, and manual QA.
+
+## Goal 2 Checkpoint 14 — Runway prompt preflight and Motion Smoke v3
+
+- Added a provider-configured Runway image-to-video Prompt preflight using UTF-16 code units;
+  over-limit prompts are rejected by the runner before provider construction and by the Provider
+  contract before submission. Runway model capabilities record the 1000-unit limit.
+- Added `prompts/home-broll-v3.txt` (892 UTF-16 units) and configured new Motion Smoke CLI requests
+  and the homepage establishing shot to use v3. The immutable v2 prompt remains unchanged for
+  existing evidence, with its recorded 1001-unit length preserved.
+- Verification: `uv run pytest` passed **193 tests**; no Runway, HeyGen, or other paid Provider
+  call was attempted. v2 SHA-256 remains `27af6d0b902e98f94d816280deef6fdca7537d1eb1b3ea53d71bdf71d9e1f9f2`.
+
+## Goal 2 Checkpoint 15 — P1-2 controlled motion variation planning
+
+- Baseline Smoke `LALA-VIDEO-20260820-040258-MOTION-SMOKE-001` is treated as passed for this
+  planning task per the owner request. Its original `review.csv` and external copy remain blank,
+  byte-preserved, and immutable; the dry-run records `passed_by_owner_instruction` separately.
+- Added three versioned prompt candidates: `MOTION-VAR-001` breathing/blink/tiny-head (959 UTF-16,
+  low risk), `MOTION-VAR-002` decor gaze shift (985 UTF-16, low-medium risk), and `MOTION-VAR-003`
+  restrained one-hand presentation (997 UTF-16, medium risk). All retain the 5s/gen4_turbo/1280:720
+  invariants and explicit forbidden-motion list.
+- Dry-run: `LALA-VIDEO-20260820-041837-MOTION-GENERATE-001`, 3 planned Runway calls, estimated 75
+  credits / $0.75, `paid_calls: 0`; evidence is under
+  `outputs/broll/p1-2-motion-variation-plan-20260820-001/p1-2-dry-run.json`.
+- Verification: targeted motion suite **9 passed**; full offline suite **195 passed**; compileall,
+  `git diff --check`, configuration validation, and evidence JSON validation passed.
+- Recommendation: generate `MOTION-VAR-001` first; if only one 25-credit Live call is allowed,
+  choose the same candidate. P1-2 is not Live-ready until Owner approves the variation plan and
+  separately authorizes Live with exact permission and credentials. Paid calls in this checkpoint: 0.
+
+## Goal 2 Checkpoint 16 — P1-1 v4 Camera-Lock candidate
+
+- The P1-1 v3 Motion Smoke `LALA-VIDEO-20260820-040258-MOTION-SMOKE-001` retained stable visual
+  identity, apparent age, and wardrobe, but external human review found camera/framing drift. It
+  is not human-QA approved.
+- Added `prompts/home-broll-v4.txt` as a Camera-Lock smoke candidate. It explicitly preserves the
+  source composition and pixel positions and prohibits global scene translation, camera drift, and
+  reframing. Its explicit v4 dry-run succeeded with one planned call and zero submissions. The
+  separately authorized one-result Runway smoke succeeded as
+  `LALA-VIDEO-20260820-045551-MOTION-SMOKE-001` (task
+  `cf1f9010-5b04-485c-b64e-32568cdbc792`): H.264 MP4, 1280×720, 5.041667 seconds, SHA-256
+  `311a14556a22582d941b114531b952e4e40f0cf97137325313277924e6bb513a`, and 25 actual credits.
+  A review package is under `outputs/review-packages/P1-1-MOTION-SMOKE-V4-20260820/`; its review
+  CSV remains blank. v4 is awaiting human QA and is not approved, production-ready, or MTL-ready.
+- The v3 default, homepage establishing preset, P1-2 motion-variation prompts, and historical
+  prompt evidence remain unchanged. P1-2 remains blocked pending P1-1 v4 human QA.
+- Paid calls made in this checkpoint: **1** (the single authorized Runway P1-1 v4 smoke). No
+  P1-2, HeyGen, voice, talking, or other provider call was made.
+
+## Goal 2 Checkpoint 17 — P1-1 v5 Eye/Mouth Lock candidate
+
+- Owner human QA accepted the v4 camera lock, framing, background, identity, face, age, hair, body
+  proportions, wardrobe, jewelry, and technical export. Eyes, mouth, and motion failed because of
+  two prolonged eye-closure periods, slight late-shot mouth opening, and unnecessary subject
+  movement; v4 is not MTL-ready. The original run review remains blank, and the reviewed FAIL copy
+  is stored outside Git under `outputs/reviews/`.
+- Added `prompts/home-broll-v5.txt` as an eye/mouth/body-lock candidate. It removes blink and
+  breathing instructions, requires naturally open eyes, steady gaze, gently closed lips, and a
+  visually steady body while retaining v4's camera/framing lock. Its dry-run succeeded with one
+  planned call and zero submissions. The separately authorized one-result Runway smoke succeeded
+  as `LALA-VIDEO-20260820-051013-MOTION-SMOKE-001` (task
+  `d3c4d0e7-ea1f-443f-a8fd-3966c789cdc4`): H.264 MP4, 1280×720, 5.041667 seconds, SHA-256
+  `c4fd95d620e0a2e854456a672fffd6e8a7542078afd280f45b3d51195ff543f1`, and 25 actual credits.
+  Its blank-review package is under `outputs/review-packages/P1-1-MOTION-SMOKE-V5-20260820/`.
+  v5 is awaiting human QA; it is not approved, production-ready, or MTL-ready.
+- The v3 default, homepage establishing preset, P1-2 motion-variation prompts, and historical v1–v4
+  evidence remain unchanged. P1-2 remains blocked pending P1-1 v5 human QA.
+- Verification: targeted Motion Smoke suite **9 passed**; full offline suite **197 passed**;
+  compileall, `git diff --check`, package SHA-256 verification, ZIP integrity, and secret scan passed.
+- Paid calls made in this checkpoint: **1** (the single authorized Runway P1-1 v5 smoke). No
+  P1-2, HeyGen, voice, talking, assembly, promotion, or other provider call was made.
+
+## Goal 2 Checkpoint 18 — P1-1 v6 combined Camera + Eye/Mouth Lock candidate
+
+- Owner human QA accepted v5 identity, face, age, hair, body proportions, wardrobe, jewelry, eyes,
+  mouth, background, and technical export. Motion failed because static-background analysis found
+  approximately 1.5 px horizontal and 12.7 px vertical global translation; v5 is not MTL-ready.
+  The original run review remains blank, and the reviewed FAIL copy is stored outside Git under
+  `outputs/reviews/`.
+- Added `prompts/home-broll-v6.txt` as a strict combination of v4's pixel-position camera lock and
+  v5's eye/mouth/subject lock. It adds no blink, breathing, head, hand, gaze-shift, or presentation
+  request. Its dry-run succeeded with one planned call and zero submissions. The separately
+  authorized one-result Runway smoke succeeded as `LALA-VIDEO-20260820-052930-MOTION-SMOKE-001`
+  (task `e538580c-fccc-47f0-b176-7f31344081c7`): H.264 MP4, 1280×720, 5.041667 seconds, SHA-256
+  `e23ced6ec64be4037f25c5f9c8f433d18df2a0577739921ba5aca2c94b10fa2b`, and 25 actual credits.
+  Four-region static-background integer-pixel analysis estimated median X/Y drift at 0.0/0.0 px;
+  this is diagnostic evidence, not automatic QA. The blank-review package is under
+  `outputs/review-packages/P1-1-MOTION-SMOKE-V6-20260820/`.
+- Owner review is now archived separately under ignored runtime evidence with Camera Lock PASS,
+  Framing FAIL, Identity PASS, Eyes FAIL, Mouth PASS, Motion FAIL, and MTL Ready FAIL. Technical
+  execution passed, but human visual acceptance failed because the subject changed position and
+  apparent scale relative to the locked background and violated the strict eyes-open target. The
+  formal status is `P1_1_V6_SMOKE_HUMAN_QA_FAILED`; the original run `review.csv` remains blank and
+  byte-unchanged. P1-1 is not passed, and v6 is not approved, production-ready, or MTL-ready.
+- The v3 default, homepage establishing preset, P1-2 motion-variation prompts, and historical v1–v5
+  evidence remain unchanged. P1-2 offline implementation and dry-run planning are allowed, while
+  P1-2 live provider execution remains blocked until P1-1 receives an explicit human MTL-ready
+  pass. Prompt-only subject locking is no longer considered sufficient acceptance evidence.
+- Verification: targeted Motion Smoke suite **10 passed**; full offline suite **198 passed**;
+  compileall, `git diff --check`, package SHA-256 verification, ZIP integrity, and secret scan passed.
+- Paid calls made in this checkpoint: **1** (the single authorized Runway P1-1 v6 smoke). No
+  P1-2, HeyGen, voice, talking, assembly, promotion, or other provider call was made.

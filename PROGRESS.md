@@ -584,3 +584,14 @@
   `submission_count=0`, using the v2 prompt hash. No live provider call was attempted.
 - Paid calls made in this checkpoint: **0**. A new live Smoke remains conditional on explicit
   owner authorization, exact video smoke flags, valid Runway credentials, and manual QA.
+
+## Goal 2 Checkpoint 14 — Runway prompt preflight and Motion Smoke v3
+
+- Added a provider-configured Runway image-to-video Prompt preflight using UTF-16 code units;
+  over-limit prompts are rejected by the runner before provider construction and by the Provider
+  contract before submission. Runway model capabilities record the 1000-unit limit.
+- Added `prompts/home-broll-v3.txt` (892 UTF-16 units) and configured new Motion Smoke CLI requests
+  and the homepage establishing shot to use v3. The immutable v2 prompt remains unchanged for
+  existing evidence, with its recorded 1001-unit length preserved.
+- Verification: `uv run pytest` passed **193 tests**; no Runway, HeyGen, or other paid Provider
+  call was attempted. v2 SHA-256 remains `27af6d0b902e98f94d816280deef6fdca7537d1eb1b3ea53d71bdf71d9e1f9f2`.

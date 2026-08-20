@@ -85,3 +85,17 @@ def test_runway_motion_enforces_model_prompt_duration_and_hash(video_project_roo
     request = replace(request, prompt_text="")
     with pytest.raises(ProviderValidationError, match="prompt"):
         provider.validate_request(request)
+
+
+def test_runway_motion_rejects_prompt_over_utf16_limit_before_submission(
+    video_project_root: Path,
+) -> None:
+    config = load_video_config(video_project_root, require_inputs=True)
+    provider = RunwayMotionProvider(
+        config.providers["runway"],
+        api_key="local-test-secret",
+        client=SimpleNamespace(image_to_video=ImageToVideo(), tasks=Tasks()),
+    )
+    request = replace(make_motion_request(video_project_root), prompt_text="a" * 1001)
+    with pytest.raises(ProviderValidationError, match=r"1001 > 1000"):
+        provider.validate_request(request)

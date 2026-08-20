@@ -227,10 +227,10 @@ uv run python -m lala_workflow video talking-smoke-test \
 Motion smoke is a separate Runway-only stage. Its live boundary is fixed at one `gen4_turbo`
 result, exactly five seconds, and no more than 25 Runway credits:
 
-Motion Smoke defaults to the historical `prompts/home-broll-v1.txt` for backward compatibility.
-For the corrected identity-validation smoke, pass `--prompt prompts/home-broll-v2.txt`; v2 uses a
-locked-off camera and keeps Lady LaLa stationary and fully visible. The homepage establishing shot
-is configured separately to use v2.
+Motion Smoke defaults to the bounded `prompts/home-broll-v3.txt`. v3 uses a locked-off camera,
+keeps Lady LaLa stationary and fully visible, and stays within Runway's 1000 UTF-16-unit prompt
+limit. The older v1 and v2 prompts remain available for historical evidence; v2 is immutable and
+is not used for new requests. The homepage establishing shot is configured to use v3.
 
 ```bash
 export VIDEO_ALLOW_LIVE_CALLS=true

@@ -38,7 +38,7 @@ from .execution import (
     validate_live_smoke_guards,
 )
 from .planning import build_shot_plan
-from .prompts import VideoPromptError, load_video_prompt
+from .prompts import VideoPromptError, load_video_prompt, utf16_code_units
 from .reporting import blank_review_rows, read_video_summary, summary_markdown
 from .review import ReviewError, load_external_review_row
 from .storage import QA_FIELDS, VideoRunContext, VideoRunStorage
@@ -88,7 +88,8 @@ def validate_video_project(project_root: Path) -> dict[str, Any]:
         script = _script(config, preset.script_id)
         if script.script_id in config.voice_profile.script_audio:
             resolve_approved_audio(config, script)
-        build_shot_plan(config, preset.name)
+        plan = build_shot_plan(config, preset.name)
+        _validate_motion_plan_prompts(config, plan)
     if shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None:
         raise VideoConfigError("FFmpeg and FFprobe are required for video workflows")
     return {
@@ -131,6 +132,7 @@ def preview_video(project_root: Path, options: VideoRunOptions) -> VideoRunOutco
         talking_variations=options.talking_variations,
         motion_variations=options.motion_variations,
     )
+    _validate_motion_plan_prompts(config, plan)
     cost = estimate_plan_cost(
         plan,
         config,
@@ -259,6 +261,9 @@ def run_motion_smoke(
             f"motion variations must be within 1..{config.limits.max_motion_variations_per_shot}"
         )
     prompt = _resolve_motion_prompt(config, options.motion_prompt)
+    _validate_motion_provider_settings(
+        config, model, duration_seconds, ratio, prompt
+    )
     planned_requests = tuple(
         PlannedRequest(
             request_id=f"motion-smoke-pilot-v{index:03d}",
@@ -1467,12 +1472,12 @@ def _write_motion_failure_bundle(config: VideoProjectConfig, options: VideoRunOp
 
 
 def _resolve_motion_prompt(config: VideoProjectConfig, selected: str | None) -> ResolvedPrompt:
-    # Motion Smoke has a stable historical default independent of any preset's
-    # current creative prompt. Variations never call this fallback: they read
-    # the reviewed smoke's recorded prompt provenance instead.
+    # Motion Smoke has a stable default independent of any preset's current
+    # creative prompt. Variations never call this fallback: they read the
+    # reviewed smoke's recorded prompt provenance instead.
     return load_video_prompt(
         config.root,
-        Path(selected) if selected else Path("prompts/home-broll-v1.txt"),
+        Path(selected) if selected else Path("prompts/home-broll-v3.txt"),
     )
 
 
@@ -1490,6 +1495,35 @@ def _validate_motion_provider_settings(config: VideoProjectConfig, model: str, d
         raise VideoConfigError(f"unsupported Runway motion ratio: {ratio}")
     if capability.get("prompt_required") is True and not prompt.text.strip():
         raise VideoConfigError(f"Runway model {model} requires a prompt")
+    prompt_limit = int(
+        capability.get("prompt_utf16_max")
+        or settings.get("prompt_utf16_max")
+        or 1000
+    )
+    prompt_units = utf16_code_units(prompt.text)
+    if prompt_units > prompt_limit:
+        raise VideoConfigError(
+            "Runway motion prompt exceeds the UTF-16 character limit "
+            f"({prompt_units} > {prompt_limit})"
+        )
+
+
+def _validate_motion_plan_prompts(config: VideoProjectConfig, plan: ShotPlan) -> None:
+    """Validate planned Runway prompts before constructing any provider client."""
+
+    for shot in plan.shots:
+        if shot.kind != "motion" or shot.prompt is None:
+            continue
+        for planned in shot.requests:
+            if planned.responsibility != "motion" or planned.duration_seconds is None:
+                continue
+            _validate_motion_provider_settings(
+                config,
+                planned.model,
+                int(planned.duration_seconds),
+                plan.resolution,
+                shot.prompt,
+            )
 
 
 def _motion_credit_estimate(config: VideoProjectConfig, model: str, duration: int, variations: int) -> float | None:
@@ -1705,6 +1739,7 @@ def generate_video(
         talking_variations=options.talking_variations,
         motion_variations=options.motion_variations,
     )
+    _validate_motion_plan_prompts(config, plan)
     smoke, smoke_review_evidence = _validate_passing_smoke(
         config.root, options.smoke_run_id, options.smoke_review_file
     )

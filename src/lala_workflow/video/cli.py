@@ -49,7 +49,7 @@ def configure_parser(subparsers: Any) -> None:
     motion_smoke.add_argument("--duration", type=int, default=5)
     motion_smoke.add_argument("--ratio", default="1280:720")
     motion_smoke.add_argument("--variations", type=int, default=1)
-    motion_smoke.add_argument("--prompt", default="prompts/home-broll-v1.txt")
+    motion_smoke.add_argument("--prompt", default="prompts/home-broll-v3.txt")
     _budgets(motion_smoke)
     _mode(motion_smoke)
 

@@ -13,6 +13,7 @@ import yaml
 from lala_workflow.video.runner import (
     VideoRunOptions,
     _validate_passing_motion_smoke,
+    preview_motion_smoke,
     run_motion_smoke,
 )
 from lala_workflow.video.prompts import VideoPromptError
@@ -110,13 +111,13 @@ def test_motion_smoke_dry_run_has_zero_submissions_and_explicit_budget(
     assert outcome.submission_count == 0
     assert request["budget"]["max_runway_credits"] == 25
     assert request["budget"]["estimated_runway_credits"] == 25
-    assert request["requests"][0]["prompt_path"].endswith("prompts/home-broll-v1.txt")
+    assert request["requests"][0]["prompt_path"].endswith("prompts/home-broll-v3.txt")
 
 
-def test_motion_smoke_prompt_override_records_exact_v2_provenance(
+def test_motion_smoke_prompt_override_records_exact_v3_provenance(
     video_project_root: Path,
 ) -> None:
-    prompt_path = video_project_root / "prompts/home-broll-v2.txt"
+    prompt_path = video_project_root / "prompts/home-broll-v3.txt"
     prompt_text = prompt_path.read_text(encoding="utf-8")
     outcome = run_motion_smoke(
         video_project_root,
@@ -125,17 +126,51 @@ def test_motion_smoke_prompt_override_records_exact_v2_provenance(
             action="motion_smoke",
             keyframe_id="hero",
             motion_variations=1,
-            motion_prompt="prompts/home-broll-v2.txt",
+            motion_prompt="prompts/home-broll-v3.txt",
             max_runway_credits=25,
         ),
     )
     request = json.loads((outcome.run_dir / "request.json").read_text(encoding="utf-8"))
     item = request["requests"][0]
-    assert item["prompt_path"].endswith("prompts/home-broll-v2.txt")
+    assert item["prompt_path"].endswith("prompts/home-broll-v3.txt")
     assert item["prompt_text"] == prompt_text
     assert item["prompt_sha256"] == hashlib.sha256(prompt_path.read_bytes()).hexdigest()
     plan = json.loads((outcome.run_dir / "shot-plan.json").read_text(encoding="utf-8"))
     assert plan["shots"][0]["prompt"]["sha256"] == item["prompt_sha256"]
+
+
+def test_motion_smoke_v3_prompt_is_within_runway_utf16_limit(
+    video_project_root: Path,
+) -> None:
+    prompt_path = video_project_root / "prompts/home-broll-v3.txt"
+    prompt_text = prompt_path.read_text(encoding="utf-8")
+    assert len(prompt_text.encode("utf-16-le")) // 2 <= 1000
+    outcome = preview_motion_smoke(
+        video_project_root,
+        VideoRunOptions(
+            preset="motion_smoke",
+            action="motion_smoke",
+            keyframe_id="hero",
+            motion_prompt="prompts/home-broll-v3.txt",
+        ),
+    )
+    request = json.loads((outcome.run_dir / "request.json").read_text(encoding="utf-8"))
+    assert request["requests"][0]["prompt_path"].endswith("prompts/home-broll-v3.txt")
+
+
+def test_motion_smoke_rejects_overlong_prompt_before_run_creation(
+    video_project_root: Path,
+) -> None:
+    with pytest.raises(ValueError, match=r"1001 > 1000"):
+        preview_motion_smoke(
+            video_project_root,
+            VideoRunOptions(
+                preset="motion_smoke",
+                action="motion_smoke",
+                keyframe_id="hero",
+                motion_prompt="prompts/home-broll-v2.txt",
+            ),
+        )
 
 
 def test_motion_smoke_rejects_unversioned_or_outside_prompt(

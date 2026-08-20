@@ -60,7 +60,7 @@ presets:
       - id: establishing
         kind: motion
         source_role: hero
-        prompt: prompts/home-broll-v2.txt
+        prompt: prompts/home-broll-v3.txt
         duration_seconds: 4
       - id: talking_performance
         kind: talking

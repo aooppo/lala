@@ -245,7 +245,7 @@ def test_prompt_drift_fails_before_motion_provider_submission(
     video_project_root: Path, synthetic_video: Path
 ) -> None:
     smoke_id, review = _passing_motion_smoke(video_project_root, synthetic_video)
-    prompt_path = video_project_root / "prompts/home-broll-v1.txt"
+    prompt_path = video_project_root / "prompts/home-broll-v3.txt"
     prompt_path.write_text(prompt_path.read_text(encoding="utf-8") + "drift\n", encoding="utf-8")
     provider = FakeMotionProvider(synthetic_video)
     with pytest.raises(ExternalInputBlocked, match="prompt no longer matches"):

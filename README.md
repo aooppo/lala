@@ -222,6 +222,40 @@ uv run python -m lala_workflow video talking-smoke-test \
   --live
 ```
 
+### Runway motion smoke and post-smoke visual selection
+
+Motion smoke is a separate Runway-only stage. Its live boundary is fixed at one `gen4_turbo`
+result, exactly five seconds, and no more than 25 Runway credits:
+
+```bash
+export VIDEO_ALLOW_LIVE_CALLS=true
+export VIDEO_MOTION_LIVE_SMOKE_TEST=true
+export RUNWAYML_API_SECRET='set-locally-do-not-commit'
+uv run python -m lala_workflow video motion-smoke-test \
+  --keyframe pilot_home_context --model gen4_turbo --duration 5 --ratio 1280:720 \
+  --max-runway-credits 25 --live
+```
+
+Copy the smoke run's blank QA sheet to `outputs/reviews/`, fill the motion/technical pass fields,
+MTL readiness, reviewer, and timezone-aware review time in that copy only. Then generate one to
+five alternatives (start with two additional variations) from the same keyframe and exact smoke
+prompt. For `gen4_turbo`, the estimate is five credits per second, so the cap must cover
+`5 * duration_seconds * variations`. The command calls Runway only;
+it does not invoke HeyGen, talking, voice, or the complete pilot:
+
+```bash
+uv run python -m lala_workflow video motion-generate \
+  --keyframe pilot_home_context --model gen4_turbo --duration 5 --ratio 1280:720 \
+  --variations 3 \
+  --motion-smoke-run-id LALA-VIDEO-MOTION-SMOKE-... \
+  --motion-smoke-review-file outputs/reviews/LALA-VIDEO-MOTION-SMOKE-...-review.csv \
+  --max-runway-credits 75 --live
+```
+
+Every invocation writes the standard thirteen-artifact append-only bundle and blank `review.csv`.
+Use `--dry-run` to validate the same smoke/review/hash/cap/variation gates with zero provider
+submissions.
+
 Mode B uses the same `HEYGEN_API_KEY` only when `configs/voice-profile.yaml` identifies an
 explicitly approved `heygen_voice` / `starfish` private voice ID. Exact script bytes are submitted
 to HeyGen speech generation, and the downloaded audio is converted to a derived PCM WAV with its

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 import json
+import math
+import csv
 import shutil
 from dataclasses import dataclass, replace
 from datetime import datetime
@@ -25,6 +27,9 @@ from .domain import (
     TalkingVideoRequest,
     VideoProjectConfig,
     VideoTaskStatus,
+    PlannedRequest,
+    PlannedShot,
+    ResolvedPrompt,
 )
 from .execution import (
     ExecutionRecord,
@@ -33,7 +38,7 @@ from .execution import (
     validate_live_smoke_guards,
 )
 from .planning import build_shot_plan
-from .prompts import load_video_prompt
+from .prompts import VideoPromptError, load_video_prompt
 from .reporting import blank_review_rows, read_video_summary, summary_markdown
 from .review import ReviewError, load_external_review_row
 from .storage import QA_FIELDS, VideoRunContext, VideoRunStorage
@@ -44,7 +49,7 @@ from .voice import resolve_approved_audio, resolve_or_synthesize_audio
 
 @dataclass(frozen=True, slots=True)
 class VideoRunOptions:
-    preset: str
+    preset: str = "motion"
     action: str = "generate"
     single_shot: bool = False
     talking_variations: int | None = None
@@ -60,6 +65,10 @@ class VideoRunOptions:
     max_provider_cost_usd: float | None = None
     max_runway_credits: float | None = None
     accept_unknown_provider_cost: bool = False
+    motion_model: str | None = None
+    motion_duration: int | None = None
+    motion_ratio: str | None = None
+    motion_prompt: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -223,6 +232,15 @@ def run_motion_smoke(
         raise ValueError("run_motion_smoke requires action=motion_smoke")
     environment = os.environ if environ is None else environ
     config = load_video_config(project_root, require_inputs=False)
+    model = options.motion_model or model
+    duration_seconds = (
+        options.motion_duration if options.motion_duration is not None else duration_seconds
+    )
+    ratio = options.motion_ratio or ratio
+    if options.live and model != "gen4_turbo":
+        raise ExternalInputBlocked(
+            "the first live motion smoke must use one gen4_turbo result of exactly 5 seconds"
+        )
     keyframe = _keyframe(config, options.keyframe_id)
     definition = config.providers.get("runway")
     if definition is None or definition.responsibility != "motion":
@@ -1199,6 +1217,469 @@ def run_talking_smoke(
     )
 
 
+def preview_motion_smoke(project_root: Path, options: VideoRunOptions) -> VideoRunOutcome:
+    """Resolve the motion smoke without constructing a provider or making a paid call."""
+    if options.live or options.action != "motion_smoke":
+        raise ValueError("preview_motion_smoke requires a dry-run motion_smoke option")
+    config = load_video_config(project_root, require_inputs=False)
+    keyframe = _keyframe(config, options.keyframe_id)
+    model = options.motion_model or "gen4_turbo"
+    duration = options.motion_duration if options.motion_duration is not None else 5
+    ratio = options.motion_ratio or "1280:720"
+    prompt = _resolve_motion_prompt(config, options.motion_prompt)
+    _validate_motion_provider_settings(config, model, duration, ratio, prompt)
+    if options.max_runway_credits is not None:
+        _validate_motion_credit_cap(config, model, duration, 1, options.max_runway_credits)
+    plan = _motion_plan("motion_smoke", prompt, model, duration, ratio, 1)
+    cost = estimate_plan_cost(plan, config, talking_duration_seconds=None)
+    cost.update({"runway_credit_cap": options.max_runway_credits, "estimated_runway_credits": _motion_credit_estimate(config, model, duration, 1)})
+    storage = VideoRunStorage(config.root)
+    run = storage.create_run("motion-smoke")
+    requests = [_motion_request_from_plan(run.run_id, config, keyframe, prompt, item, ratio) for item in plan.shots[0].requests]
+    storage.append_event(run, "validated", {"mode": "DRY_RUN", "action": "motion_smoke", "provider_call_count": 1})
+    _write_motion_bundle(config, options, plan, keyframe, prompt, storage, run, requests, (), cost, status="DRY_RUN_COMPLETE", smoke_context=None)
+    storage.append_event(run, "dry_run_completed", {"submission_count": 0})
+    storage.assert_complete(run)
+    return VideoRunOutcome(run.run_id, run.path, run, plan, 1, 0, "DRY_RUN_COMPLETE")
+
+
+def generate_motion_variations(
+    project_root: Path,
+    options: VideoRunOptions,
+    *,
+    provider: Any | None = None,
+    environ: Mapping[str, str] | None = None,
+) -> VideoRunOutcome:
+    """Generate 1..N Runway-only variations unlocked by a reviewed motion smoke."""
+    if options.action != "motion_generate":
+        raise ValueError("generate_motion_variations requires a motion_generate option")
+    environment = os.environ if environ is None else environ
+    config = load_video_config(project_root, require_inputs=False)
+    keyframe = _keyframe(config, options.keyframe_id)
+    variations = options.motion_variations if options.motion_variations is not None else 1
+    if isinstance(variations, bool) or not 1 <= variations <= config.limits.max_motion_variations_per_shot:
+        raise ExternalInputBlocked(
+            "motion variations must be within 1.."
+            f"{config.limits.max_motion_variations_per_shot}"
+        )
+    model = options.motion_model or "gen4_turbo"
+    duration = options.motion_duration if options.motion_duration is not None else 5
+    ratio = options.motion_ratio or "1280:720"
+    smoke, review_evidence = _validate_passing_motion_variation_smoke(
+        config.root, options.smoke_run_id, options.smoke_review_file
+    )
+    smoke_request = _first_motion_request(smoke)
+    if (smoke_request.get("keyframe_sha256") or smoke_request.get("image_sha256")) != keyframe.sha256:
+        raise ExternalInputBlocked("motion smoke used a different approved keyframe digest")
+    prompt_path = Path(str(smoke_request.get("prompt_path") or ""))
+    if not prompt_path.as_posix():
+        raise ExternalInputBlocked("motion smoke prompt provenance is missing")
+    if prompt_path.is_absolute():
+        try:
+            prompt_path = prompt_path.relative_to(config.root)
+        except ValueError as exc:
+            raise ExternalInputBlocked("motion smoke prompt provenance escapes project root") from exc
+    try:
+        prompt = load_video_prompt(config.root, prompt_path)
+    except VideoPromptError as exc:
+        raise ExternalInputBlocked("motion smoke prompt provenance is invalid") from exc
+    if prompt.sha256 != smoke_request.get("prompt_sha256") or prompt.text != smoke_request.get("prompt_text"):
+        raise ExternalInputBlocked("motion smoke prompt no longer matches its recorded provenance")
+    _validate_motion_provider_settings(config, model, duration, ratio, prompt)
+    cap = options.max_runway_credits
+    _validate_motion_credit_cap(config, model, duration, variations, cap)
+    if options.live:
+        validate_live_provider_guard("runway", environment)
+    if provider is None:
+        if not options.live:
+            raise ValueError("motion variation preview must use preview_motion_variations")
+        provider = _create_motion_provider(config, environment)
+    return _execute_motion_run(
+        config,
+        options,
+        keyframe=keyframe,
+        prompt=prompt,
+        model=model,
+        duration=duration,
+        ratio=ratio,
+        variations=variations,
+        action="motion_generate",
+        provider=provider,
+        smoke_context={
+            "motion_smoke_run_id": options.smoke_run_id,
+            "motion_smoke_review": review_evidence,
+        },
+        credit_cap=cap,
+        environ=environment,
+    )
+
+
+def preview_motion_variations(
+    project_root: Path, options: VideoRunOptions
+) -> VideoRunOutcome:
+    """Create a zero-call motion variation preview after validating smoke provenance."""
+    if options.live or options.action != "motion_generate":
+        raise ValueError("preview_motion_variations requires a dry-run motion_generate option")
+    # Smoke and review are validated for dry-run too; only the live environment/credential
+    # gate is skipped. This keeps previews useful while preserving the same evidence contract.
+    config = load_video_config(project_root, require_inputs=False)
+    keyframe = _keyframe(config, options.keyframe_id)
+    variations = options.motion_variations if options.motion_variations is not None else 1
+    if isinstance(variations, bool) or not 1 <= variations <= config.limits.max_motion_variations_per_shot:
+        raise ExternalInputBlocked(
+            "motion variations must be within 1.."
+            f"{config.limits.max_motion_variations_per_shot}"
+        )
+    smoke, review_evidence = _validate_passing_motion_variation_smoke(
+        config.root, options.smoke_run_id, options.smoke_review_file
+    )
+    smoke_request = _first_motion_request(smoke)
+    if (smoke_request.get("keyframe_sha256") or smoke_request.get("image_sha256")) != keyframe.sha256:
+        raise ExternalInputBlocked("motion smoke used a different approved keyframe digest")
+    prompt_path = Path(str(smoke_request.get("prompt_path") or ""))
+    if prompt_path.is_absolute():
+        try:
+            prompt_path = prompt_path.relative_to(config.root)
+        except ValueError as exc:
+            raise ExternalInputBlocked("motion smoke prompt provenance escapes project root") from exc
+    try:
+        prompt = load_video_prompt(config.root, prompt_path)
+    except VideoPromptError as exc:
+        raise ExternalInputBlocked("motion smoke prompt provenance is invalid") from exc
+    if prompt.sha256 != smoke_request.get("prompt_sha256") or prompt.text != smoke_request.get("prompt_text"):
+        raise ExternalInputBlocked("motion smoke prompt no longer matches its recorded provenance")
+    model = options.motion_model or str(smoke_request.get("model") or "gen4_turbo")
+    duration = options.motion_duration if options.motion_duration is not None else int(smoke_request.get("duration_seconds") or 5)
+    ratio = options.motion_ratio or str(smoke_request.get("ratio") or "1280:720")
+    _validate_motion_provider_settings(config, model, duration, ratio, prompt)
+    if options.max_runway_credits is not None:
+        _validate_motion_credit_cap(config, model, duration, variations, options.max_runway_credits)
+    plan = _motion_plan("motion_generate", prompt, model, duration, ratio, variations)
+    cost = estimate_plan_cost(plan, config, talking_duration_seconds=None)
+    cost.update({"runway_credit_cap": options.max_runway_credits, "estimated_runway_credits": _motion_credit_estimate(config, model, duration, variations)})
+    storage = VideoRunStorage(config.root)
+    run = storage.create_run("motion-generate")
+    requests = [_motion_request_from_plan(run.run_id, config, keyframe, prompt, item, ratio) for item in plan.shots[0].requests]
+    storage.append_event(run, "validated", {"mode": "DRY_RUN", "action": "motion_generate", "provider_call_count": variations})
+    _write_motion_bundle(
+        config, options, plan, keyframe, prompt, storage, run, requests, (), cost,
+        status="DRY_RUN_COMPLETE", smoke_context={"motion_smoke_run_id": options.smoke_run_id, "motion_smoke_review": review_evidence},
+    )
+    storage.append_event(run, "dry_run_completed", {"submission_count": 0})
+    storage.assert_complete(run)
+    return VideoRunOutcome(run.run_id, run.path, run, plan, variations, 0, "DRY_RUN_COMPLETE")
+
+
+def _motion_plan(mode: str, prompt: ResolvedPrompt, model: str, duration: int, ratio: str, variations: int) -> ShotPlan:
+    requests = tuple(
+        PlannedRequest(
+            request_id=f"motion-{mode.replace('_', '-')}-v{index:03d}",
+            shot_id="motion_variation",
+            variation=index,
+            responsibility="motion",
+            provider="runway",
+            model=model,
+            duration_seconds=float(duration),
+        )
+        for index in range(1, variations + 1)
+    )
+    return ShotPlan(
+        preset="motion-generate" if mode == "motion_generate" else "motion-smoke",
+        mode=mode,
+        script_id="",
+        aspect_ratio=ratio,
+        resolution=ratio,
+        frame_rate=30,
+        shots=(PlannedShot("motion_variation", "motion", "hero", prompt, float(duration), variations, variations > 1, requests),),
+        final_edit_variations=1,
+        voice_request_count=0,
+    )
+
+
+def _motion_request_from_plan(run_id: str, config: VideoProjectConfig, keyframe: ApprovedKeyframe, prompt: ResolvedPrompt, planned: PlannedRequest, ratio: str | None = None) -> MotionVideoRequest:
+    return MotionVideoRequest(
+        request_id=f"{run_id}-{planned.request_id}", run_id=run_id, preset="motion-generate",
+        shot_id=planned.shot_id, variation=planned.variation, provider="runway", model=planned.model,
+        image_path=config.root / keyframe.path, image_sha256=keyframe.sha256,
+        prompt_path=config.root / prompt.path, prompt_text=prompt.text, prompt_sha256=prompt.sha256,
+        ratio=ratio or "1280:720",
+        duration_seconds=int(planned.duration_seconds or 0), seed=None, output_format="mp4",
+        timeout_seconds=config.limits.provider_timeout_seconds, max_retries=config.limits.max_retries,
+    )
+
+
+def _execute_motion_run(config: VideoProjectConfig, options: VideoRunOptions, *, keyframe: ApprovedKeyframe, prompt: ResolvedPrompt, model: str, duration: int, ratio: str, variations: int, action: str, provider: Any, smoke_context: Mapping[str, Any] | None, credit_cap: float | None, environ: Mapping[str, str] | None = None) -> VideoRunOutcome:
+    plan = _motion_plan(action, prompt, model, duration, ratio, variations)
+    secret_environment = environ if options.live and environ is not None else {}
+    storage = VideoRunStorage(config.root, secrets=tuple(value for key, value in secret_environment.items() if key.endswith(("_API_KEY", "_API_SECRET")) and value))
+    run = storage.create_run("motion-smoke" if action == "motion_smoke" else "motion-generate")
+    storage.append_event(run, "live_authorized", {"stage": action, "provider": "runway", "provider_call_count": variations, **dict(smoke_context or {})})
+    requests = [_motion_request_from_plan(run.run_id, config, keyframe, prompt, item, ratio) for item in plan.shots[0].requests]
+    executions: list[ExecutionRecord] = []
+    try:
+        for request in requests:
+            try:
+                executions.append(execute_provider_request(request, provider, storage, run, config.root / "outputs/broll" / run.run_id))
+            except Exception as exc:
+                storage.append_event(run, "request_failed", {"request_id": request.request_id, "error": str(exc)})
+                executions.append(ExecutionRecord(request.request_id, None, VideoTaskStatus.FAILED, 1, (), getattr(exc, "code", "submission_or_download_error"), str(exc)))
+    except Exception as exc:
+        _write_motion_failure_bundle(config, options, plan, keyframe, prompt, storage, run, requests, executions, exc, smoke_context, credit_cap)
+        raise
+    artifacts = tuple(artifact for execution in executions for artifact in execution.artifacts)
+    successful = sum(1 for execution in executions if execution.status is VideoTaskStatus.SUCCEEDED and execution.artifacts)
+    status = "SUCCEEDED" if successful == variations else ("PARTIAL" if successful else "FAILED")
+    cost = estimate_plan_cost(plan, config, talking_duration_seconds=None)
+    cost.update({"runway_credit_cap": credit_cap, "estimated_runway_credits": _motion_credit_estimate(config, model, duration, variations)})
+    _apply_execution_cost_facts(cost, executions, {request.request_id: "motion" for request in requests})
+    _write_motion_bundle(config, options, plan, keyframe, prompt, storage, run, requests, executions, cost, status=status, smoke_context=smoke_context)
+    storage.append_event(run, "motion_generation_completed", {"status": status, "successful_outputs": len(artifacts)})
+    storage.assert_complete(run)
+    return VideoRunOutcome(run.run_id, run.path, run, plan, variations, sum(1 for execution in executions if execution.provider_task_id), status)
+
+
+def _write_motion_bundle(config: VideoProjectConfig, options: VideoRunOptions, plan: ShotPlan, keyframe: ApprovedKeyframe, prompt: ResolvedPrompt, storage: VideoRunStorage, run: VideoRunContext, requests: list[MotionVideoRequest], executions: tuple[ExecutionRecord, ...] | list[ExecutionRecord] | tuple[Any, ...], cost: Mapping[str, Any], *, status: str, smoke_context: Mapping[str, Any] | None) -> None:
+    artifacts = tuple(artifact for execution in executions for artifact in execution.artifacts)
+    request_evidence = [to_primitive(request) for request in requests]
+    result_rows = [{"request_id": execution.request_id, "provider_task_id": execution.provider_task_id, "status": execution.status.value, "submission_attempts": execution.submission_attempts, "error_code": execution.error_code, "error_message": execution.error_message, "artifacts": [_artifact_evidence(artifact, config.root) for artifact in execution.artifacts]} for execution in executions]
+    storage.write_json_new(run, "request.json", {"run_id": run.run_id, "mode": "LIVE" if options.live else "DRY_RUN", "action": options.action, "preset": "motion", "provider": "runway", "provider_call_count": plan.provider_call_count, "max_runway_credits": cost.get("runway_credit_cap"), "estimated_runway_credits": cost.get("estimated_runway_credits"), "requests": request_evidence, **dict(smoke_context or {})})
+    storage.write_yaml_new(run, "resolved-config.yaml", {"action": options.action, "model": plan.shots[0].requests[0].model if plan.shots[0].requests else None, "duration_seconds": plan.shots[0].duration_seconds, "ratio": plan.aspect_ratio, "variations": plan.shots[0].variation_count, "credit_cap": cost.get("runway_credit_cap"), "estimated_runway_credits": cost.get("estimated_runway_credits"), "limits": to_primitive(config.limits), "live": options.live, **dict(smoke_context or {})})
+    storage.write_bytes_new(run, "script.txt", b"")
+    storage.write_json_new(run, "script-hash.json", {"status": "not_applicable", "sha256": None})
+    storage.write_json_new(run, "audio-hash.json", {"status": "not_applicable", "sha256": None})
+    storage.write_json_new(run, "keyframe-hash.json", _keyframe_evidence(keyframe, config))
+    storage.write_json_new(run, "shot-plan.json", {**to_primitive(plan), "prompt": to_primitive(prompt)})
+    storage.write_json_new(run, "provider-results.json", {"status": status, "provider": "runway", "submission_count": sum(1 for execution in executions if execution.provider_task_id), "submission_attempts": sum(execution.submission_attempts for execution in executions), "successful_outputs": len(artifacts), "failed_outputs": len(requests) - len(artifacts), "results": result_rows})
+    storage.write_text_new(run, "edit-commands.txt", "")
+    storage.write_review_new(run, blank_review_rows(run.run_id, "motion", [_artifact_evidence(artifact, config.root) for artifact in artifacts]))
+    storage.write_json_new(run, "cost.json", cost)
+    storage.write_text_new(run, "summary.md", summary_markdown(run_id=run.run_id, preset="motion", status=status, provider_call_count=plan.provider_call_count, output_count=len(artifacts), total_provider_cost=cost.get("total_provider_cost")))
+
+
+def _write_motion_failure_bundle(config: VideoProjectConfig, options: VideoRunOptions, plan: ShotPlan, keyframe: ApprovedKeyframe, prompt: ResolvedPrompt, storage: VideoRunStorage, run: VideoRunContext, requests: list[MotionVideoRequest], executions: list[ExecutionRecord], error: Exception, smoke_context: Mapping[str, Any] | None, credit_cap: float | None) -> None:
+    storage.append_event(run, "workflow_failed", {"stage": options.action, "error_type": type(error).__name__, "error": str(error)})
+    cost = estimate_plan_cost(plan, config, talking_duration_seconds=None)
+    cost.update({"runway_credit_cap": credit_cap, "estimated_runway_credits": _motion_credit_estimate(config, plan.shots[0].requests[0].model, int(plan.shots[0].duration_seconds or 0), plan.shots[0].variation_count)})
+    _write_motion_bundle(config, options, plan, keyframe, prompt, storage, run, requests, tuple(executions), cost, status="FAILED", smoke_context=smoke_context)
+    storage.assert_complete(run)
+
+
+def _resolve_motion_prompt(config: VideoProjectConfig, selected: str | None) -> ResolvedPrompt:
+    if selected:
+        return load_video_prompt(config.root, Path(selected))
+    for preset in config.presets.values():
+        for shot in preset.shots:
+            if shot.kind == "motion" and shot.prompt_file is not None:
+                return load_video_prompt(config.root, shot.prompt_file)
+    raise ExternalInputBlocked("no versioned motion prompt is configured")
+
+
+def _validate_motion_provider_settings(config: VideoProjectConfig, model: str, duration: int, ratio: str, prompt: ResolvedPrompt) -> None:
+    definition = config.providers.get("runway")
+    if definition is None:
+        raise VideoConfigError("Runway motion provider is not configured")
+    settings = definition.settings
+    capability = (settings.get("supported_models") or {}).get(model)
+    if not isinstance(capability, Mapping):
+        raise VideoConfigError(f"unsupported Runway motion model: {model}")
+    if duration not in tuple(int(value) for value in capability.get("durations", ())):
+        raise VideoConfigError(f"unsupported Runway motion duration: {duration}")
+    if ratio not in tuple(str(value) for value in capability.get("ratios", ())):
+        raise VideoConfigError(f"unsupported Runway motion ratio: {ratio}")
+    if capability.get("prompt_required") is True and not prompt.text.strip():
+        raise VideoConfigError(f"Runway model {model} requires a prompt")
+
+
+def _motion_credit_estimate(config: VideoProjectConfig, model: str, duration: int, variations: int) -> float | None:
+    settings = config.providers["runway"].settings
+    capability = (settings.get("supported_models") or {}).get(model)
+    if not isinstance(capability, Mapping) or capability.get("credits_per_second") is None:
+        return None
+    return float(capability["credits_per_second"]) * duration * variations
+
+
+def _validate_motion_credit_cap(config: VideoProjectConfig, model: str, duration: int, variations: int, cap: float | None, *, require_cap: bool = True) -> None:
+    if cap is not None and (not math.isfinite(cap) or cap <= 0):
+        raise ExternalInputBlocked("max Runway credits must be a finite positive number")
+    if cap is None and require_cap:
+        raise ExternalInputBlocked("live motion generation requires an explicit --max-runway-credits cap")
+    if cap is None:
+        return
+    estimate = _motion_credit_estimate(config, model, duration, variations)
+    if estimate is None:
+        raise ExternalInputBlocked("Runway credit estimate is unavailable; refusing live generation")
+    if estimate > cap:
+        raise ExternalInputBlocked(f"Runway credit cap exceeded: estimated {estimate:g} > cap {cap:g}")
+
+
+def _validate_motion_smoke_guards(model: str, duration: int, ratio: str, cap: float | None, environment: Mapping[str, str], config: VideoProjectConfig) -> None:
+    validate_live_provider_guard("runway", environment)
+    if model != "gen4_turbo":
+        raise ExternalInputBlocked("motion smoke model is strictly gen4_turbo")
+    if duration != 5:
+        raise ExternalInputBlocked("motion smoke duration is strictly 5 seconds")
+    _validate_motion_credit_cap(config, model, duration, 1, cap)
+    if cap is not None and cap > 25:
+        raise ExternalInputBlocked("motion smoke credit cap must not exceed 25 Runway credits")
+    if _motion_credit_estimate(config, model, duration, 1) > 25:
+        raise ExternalInputBlocked("motion smoke maximum is 25 Runway credits")
+    if ratio not in tuple(str(value) for value in config.providers["runway"].settings["supported_models"][model].get("ratios", ())):
+        raise ExternalInputBlocked(f"unsupported Runway motion ratio: {ratio}")
+
+
+def _create_motion_provider(config: VideoProjectConfig, environment: Mapping[str, str]) -> Any:
+    from ..providers.runway_video import RunwayMotionProvider
+
+    return RunwayMotionProvider(config.providers["runway"], api_key=str(environment["RUNWAYML_API_SECRET"]))
+
+
+def _validate_passing_motion_variation_smoke(project_root: Path, run_id: str | None, review_file: Path | None) -> tuple[dict[str, Any], dict[str, str]]:
+    if not run_id or "/" in run_id or "\\" in run_id:
+        raise ExternalInputBlocked("motion generation requires a reviewed passing --motion-smoke-run-id")
+    run_dir = (project_root / "runs" / run_id).resolve()
+    runs_root = (project_root / "runs").resolve()
+    if runs_root not in run_dir.parents or not run_dir.is_dir():
+        raise ExternalInputBlocked(f"motion smoke run does not exist: {run_id}")
+    try:
+        request = json.loads((run_dir / "request.json").read_text(encoding="utf-8"))
+        results = json.loads((run_dir / "provider-results.json").read_text(encoding="utf-8"))
+        keyframe_evidence = json.loads((run_dir / "keyframe-hash.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ExternalInputBlocked(f"motion smoke run evidence is incomplete: {run_id}") from exc
+    if request.get("action") != "motion_smoke" or results.get("status") != "SUCCEEDED":
+        raise ExternalInputBlocked("motion smoke run is not a successful Runway motion result")
+    request_items = request.get("requests") or []
+    recorded_keyframe_sha256 = next(
+        (
+            item.get("image_sha256") or item.get("keyframe_sha256")
+            for item in request_items
+            if isinstance(item, dict)
+        ),
+        None,
+    )
+    if not recorded_keyframe_sha256 or keyframe_evidence.get("sha256") != recorded_keyframe_sha256:
+        raise ExternalInputBlocked("motion smoke keyframe provenance is inconsistent")
+    result_items = results.get("results") or []
+    if len(result_items) != 1 or len(result_items[0].get("artifacts") or []) != 1:
+        raise ExternalInputBlocked("motion smoke must contain exactly one output")
+    artifact = result_items[0]["artifacts"][0]
+    candidate = str(artifact.get("candidate") or artifact.get("video_id") or "")
+    if not candidate:
+        raise ExternalInputBlocked("motion smoke output provenance is missing")
+    if review_file is None:
+        raise ExternalInputBlocked("motion generation requires an immutable --motion-smoke-review-file")
+    try:
+        row, evidence = _load_motion_review_copy(project_root, run_dir, candidate, review_file)
+    except ReviewError as exc:
+        raise ExternalInputBlocked(str(exc)) from exc
+    required = ("visual_identity_pass", "face_stability_pass", "hair_pass", "wardrobe_pass", "jewelry_pass", "eye_motion_pass", "background_pass", "motion_quality_pass")
+    if _truthy(row.get("legacy_motion_schema")):
+        required += ("age_stability_pass", "body_proportions_pass")
+    else:
+        required += ("technical_export_pass",)
+    if any(not _truthy(row.get(field)) for field in required):
+        raise ExternalInputBlocked("motion smoke manual QA review has incomplete or failing decisions")
+    if not _truthy(row.get("mtl_review_ready")) or not str(row.get("reviewer") or "").strip():
+        raise ExternalInputBlocked("motion smoke review must be explicitly approved by a reviewer")
+    try:
+        reviewed_at = datetime.fromisoformat(str(row.get("reviewed_at") or "").replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ExternalInputBlocked("motion smoke review reviewed_at is invalid") from exc
+    if reviewed_at.tzinfo is None:
+        raise ExternalInputBlocked("motion smoke review reviewed_at must include a timezone")
+    source_path = (project_root / str(artifact.get("path") or "")).resolve()
+    outputs_root = (project_root / "outputs/broll").resolve()
+    if outputs_root not in source_path.parents or not source_path.is_file():
+        raise ExternalInputBlocked("motion smoke output is missing or outside broll outputs")
+    if sha256_file(source_path) != artifact.get("sha256"):
+        raise ExternalInputBlocked("motion smoke output hash no longer matches evidence")
+    return request, evidence
+
+
+def _load_motion_review_copy(project_root: Path, run_dir: Path, candidate: str, review_file: Path) -> tuple[dict[str, str], dict[str, str]]:
+    """Read modern video QA rows and the legacy motion-smoke QA schema immutably.
+
+    Existing real motion smoke runs predate the unified video QA header. Supporting their
+    equivalent, motion-only fields lets operators continue from that approved evidence without
+    rewriting the run or weakening the stricter talking/pilot review parser.
+    """
+    root = project_root.resolve()
+    path = review_file if review_file.is_absolute() else root / review_file
+    path = path.resolve()
+    reviews_root = (root / "outputs/reviews").resolve()
+    if reviews_root not in path.parents or not path.is_file():
+        raise ReviewError("review file must be an existing copy under outputs/reviews")
+    baseline_path = run_dir / "review.csv"
+    try:
+        with baseline_path.open(newline="", encoding="utf-8") as source:
+            baseline_reader = csv.DictReader(source)
+            baseline_fields = baseline_reader.fieldnames or []
+            baseline_rows = [dict(row) for row in baseline_reader if row.get("candidate") == candidate]
+        with path.open(newline="", encoding="utf-8") as source:
+            reader = csv.DictReader(source)
+            fields = reader.fieldnames or []
+            rows = [dict(row) for row in reader if row.get("candidate") == candidate]
+    except (OSError, UnicodeDecodeError, csv.Error) as exc:
+        raise ReviewError("motion review CSV is unreadable") from exc
+    if len(baseline_rows) != 1 or len(rows) != 1:
+        raise ReviewError(f"candidate must have exactly one motion review row: {candidate}")
+    if fields == list(QA_FIELDS):
+        row, evidence = load_external_review_row(root, run_dir, candidate, path, require_ready=False)
+        normalized = dict(row)
+        normalized.update(
+            {
+                "visual_identity_pass": row.get("visual_identity", ""),
+                "face_stability_pass": row.get("face_stability", ""),
+                "hair_pass": row.get("hair_stability", ""),
+                "wardrobe_pass": row.get("wardrobe", ""),
+                "jewelry_pass": row.get("jewelry", ""),
+                "eye_motion_pass": row.get("eyes", ""),
+                "background_pass": row.get("background", ""),
+                "motion_quality_pass": row.get("motion", ""),
+                "technical_export_pass": row.get("technical_export", ""),
+                "age_stability_pass": row.get("age_stability", ""),
+                "body_proportions_pass": row.get("body_proportions", ""),
+            }
+        )
+        return normalized, evidence
+    legacy_required = {"run_id", "video_id", "preset", "candidate", "mtl_review_ready", "reviewer", "reviewed_at"}
+    if not legacy_required.issubset(fields) or not {"run_id", "video_id", "preset", "candidate"}.issubset(baseline_fields):
+        raise ReviewError("motion review.csv header does not match a supported QA schema")
+    baseline = baseline_rows[0]
+    row = rows[0]
+    for field in ("run_id", "video_id", "preset", "candidate"):
+        if row.get(field) != baseline.get(field):
+            raise ReviewError(f"external motion review candidate provenance mismatch: {field}")
+    human_fields = [field for field in baseline_fields if field not in {"run_id", "video_id", "preset", "candidate"}]
+    if any(str(baseline.get(field) or "").strip() for field in human_fields):
+        raise ReviewError("run motion review human fields must remain blank append-only evidence")
+    normalized = {
+        "visual_identity_pass": row.get("visual_identity", ""),
+        "face_stability_pass": row.get("face_stability", ""),
+        "hair_pass": row.get("hair_stability", ""),
+        "wardrobe_pass": row.get("wardrobe", ""),
+        "jewelry_pass": row.get("jewelry", ""),
+        "eye_motion_pass": row.get("eyes", ""),
+        "background_pass": row.get("background", ""),
+        "motion_quality_pass": row.get("motion", ""),
+        "technical_export_pass": row.get("technical_export", ""),
+        "age_stability_pass": row.get("age_stability", ""),
+        "body_proportions_pass": row.get("body_proportions", ""),
+        "legacy_motion_schema": "true",
+        "mtl_review_ready": row.get("mtl_review_ready", ""),
+        "reviewer": row.get("reviewer", ""),
+        "reviewed_at": row.get("reviewed_at", ""),
+    }
+    return normalized, {"path": path.relative_to(root).as_posix(), "sha256": sha256_file(path)}
+
+
+def _first_motion_request(request_evidence: Mapping[str, Any]) -> dict[str, Any]:
+    for item in request_evidence.get("requests") or []:
+        if isinstance(item, dict) and (item.get("image_sha256") or item.get("keyframe_sha256")):
+            return item
+    raise ExternalInputBlocked("motion smoke request provenance is missing")
+
+
 def generate_video(
     project_root: Path,
     options: VideoRunOptions,
@@ -1802,6 +2283,38 @@ def handle_video_command(args: Any) -> tuple[int, Any]:
             "planned_provider_calls": outcome.provider_call_count,
             "paid_calls": outcome.submission_count,
         }
+    if args.video_command in {"motion-smoke-test", "motion-generate"}:
+        is_smoke = args.video_command == "motion-smoke-test"
+        options = VideoRunOptions(
+            preset="motion",
+            action="motion_smoke" if is_smoke else "motion_generate",
+            keyframe_id=args.keyframe,
+            live=bool(args.live),
+            motion_model=args.model,
+            motion_duration=args.duration,
+            motion_ratio=args.ratio,
+            motion_variations=1 if is_smoke else args.variations,
+            max_runway_credits=args.max_runway_credits,
+            motion_prompt=getattr(args, "prompt", None),
+            smoke_run_id=getattr(args, "motion_smoke_run_id", None),
+            smoke_review_file=(Path(args.motion_smoke_review_file) if getattr(args, "motion_smoke_review_file", None) else None),
+        )
+        if is_smoke:
+            if args.live:
+                outcome = run_motion_smoke(args.project_root, options)
+            else:
+                outcome = preview_motion_smoke(args.project_root, options)
+        elif args.live:
+            outcome = generate_motion_variations(args.project_root, options)
+        else:
+            outcome = preview_motion_variations(args.project_root, options)
+        return (0 if outcome.status in {"SUCCEEDED", "DRY_RUN_COMPLETE"} else 3), {
+            "run_id": outcome.run_id,
+            "run_dir": str(outcome.run_dir),
+            "status": outcome.status,
+            "planned_provider_calls": outcome.provider_call_count,
+            "paid_calls": outcome.submission_count,
+        }
     if args.video_command == "report":
         from .reporting import build_video_report
 
@@ -1847,6 +2360,13 @@ def _script(config: VideoProjectConfig, script_id: str) -> ScriptRecord:
 def _keyframe(config: VideoProjectConfig, selected: str | None) -> ApprovedKeyframe:
     if selected:
         if selected not in config.keyframes:
+            selected_path = Path(selected)
+            for candidate in config.keyframes.values():
+                if (
+                    selected_path.as_posix() == candidate.path.as_posix()
+                    or selected_path.as_posix() == (config.root / candidate.path).as_posix()
+                ):
+                    return candidate
             raise ExternalInputBlocked(f"approved keyframe does not exist: {selected}")
         return config.keyframes[selected]
     if not config.keyframes:

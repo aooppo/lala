@@ -17,8 +17,18 @@ class ProviderProtocolMeta(type(Protocol)):
 
     @property
     def __protocol_attrs__(cls) -> frozenset[str]:
+        stored = cls.__dict__.get("_provider_protocol_attrs")
+        if stored is not None:
+            return frozenset(stored)
         return frozenset(
             name
             for name, value in cls.__dict__.items()
             if not name.startswith("_") and callable(value)
         )
+
+    @__protocol_attrs__.setter
+    def __protocol_attrs__(cls, value: object) -> None:
+        # Python 3.13's typing.Protocol assigns this cache during class creation.
+        # Store it under a private name so the public compatibility property remains
+        # introspection-only and does not become a structural protocol member.
+        type.__setattr__(cls, "_provider_protocol_attrs", frozenset(value))

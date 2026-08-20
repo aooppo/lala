@@ -532,3 +532,35 @@
   promotion is required), and the separately reviewed motion-smoke copy remain external gates.
 - Paid calls made: **0** for this checkpoint and this Goal 2 task. The read-only Voice Verify is
   not a paid generation call; the earlier authorized Goal 1 image call remains outside Goal 2.
+
+### Post-smoke Runway motion variation generation
+
+- Implemented independent `video motion-smoke-test` and `video motion-generate` paths. Motion
+  smoke remains one `gen4_turbo` result at exactly five seconds and a maximum 25-credit cap.
+- Post-smoke live generation requires exact video permission, a successful motion smoke, an
+  immutable passing review copy, matching keyframe/prompt digests, explicit credit cap, and a
+  variation count within the configured 1–5 maximum. It constructs Runway only and writes the
+  standard thirteen-artifact bundle with blank human QA rows.
+- Added fake-provider coverage for strict bounds, failed review/keyframe/cap/variation gates,
+  zero-call dry-runs, independent results, and Runway-only submissions.
+- Verification: motion-specific suite passed; live paid calls made: 0. Production live execution
+  remains blocked because local credentials and explicit owner authorization are absent.
+
+## Goal 2 Checkpoint 12 — Post-smoke motion variation audit
+
+- Post-smoke motion variations implementation: offline complete. Smoke and post-smoke variation
+  remain separate stages; the latter requires an immutable external review copy and never fills
+  human QA fields automatically.
+- Real motion smoke provider execution: succeeded previously as
+  `LALA-VIDEO-20260819-154007-MOTION-SMOKE-001`. Its original `review.csv` and the copied review
+  CSV under `outputs/reviews/` remain byte-identical and blank; real motion smoke manual QA:
+  pending.
+- `motion-generate` live: not run. With the blank real review copy it returns
+  `BLOCKED_EXTERNAL: motion smoke manual QA review has incomplete or failing decisions` before
+  Runway provider construction.
+- The origin/main audit exposed a Python 3.13 protocol-introspection collection error; the
+  compatibility repair restores the recorded 181-test baseline. Current collection/full suite:
+  188 tests, all passed; seven new tests cover motion variation guards, legacy schema compatibility,
+  blank-review zero-call behavior, and complete bundles.
+- New paid calls in this task: 0. The smoke dry-run completed with one planned provider call and
+  zero paid calls; synthetic reviewed variation dry-runs also use zero submissions.

@@ -417,7 +417,7 @@ def _parse_providers(
             raw_safety.get("max_talking_variations_per_shot"), "max talking variations", 1, 3
         ),
         max_motion_variations_per_shot=_bounded_int(
-            raw_safety.get("max_motion_variations_per_shot"), "max motion variations", 1, 3
+            raw_safety.get("max_motion_variations_per_shot"), "max motion variations", 1, 5
         ),
         max_final_edits_per_video=_bounded_int(
             raw_safety.get("max_final_edits_per_video"), "max final edits", 1, 2

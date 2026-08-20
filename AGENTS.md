@@ -103,6 +103,13 @@ talking result. Full pilot generation requires the ID of a successful, explicitl
 run. Defaults are three talking/motion variations, two final edits, concurrency one, two retries,
 and a 1,800-second provider timeout. Do not run any live video call automatically.
 
+Post-smoke motion selection is a separate Runway-only path. `video motion-smoke-test --live` remains
+strictly one `gen4_turbo` variation at exactly five seconds and at most 25 Runway credits. After a
+successful, manually reviewed motion smoke, `video motion-generate` may request 1–5 variations
+(bounded by `max_motion_variations_per_shot`) only with the same approved keyframe and prompt, an
+explicit `--max-runway-credits` cap, exact `VIDEO_ALLOW_LIVE_CALLS=true`, and the Runway credential.
+It never constructs HeyGen or talking/voice providers.
+
 ## Testing requirements
 
 Maintain unit and mocked integration coverage for configuration, manifest/image validation,

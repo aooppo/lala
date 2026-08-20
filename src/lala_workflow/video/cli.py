@@ -52,6 +52,19 @@ def configure_parser(subparsers: Any) -> None:
     _budgets(motion_smoke)
     _mode(motion_smoke)
 
+    motion_generate = commands.add_parser(
+        "motion-generate", help="generate bounded Runway motion variations after a reviewed smoke"
+    )
+    _project_root(motion_generate)
+    motion_generate.add_argument("--keyframe", required=True)
+    motion_generate.add_argument("--model", default="gen4_turbo")
+    motion_generate.add_argument("--duration", type=int, default=5)
+    motion_generate.add_argument("--ratio", default="1280:720")
+    motion_generate.add_argument("--variations", type=int, default=1)
+    motion_generate.add_argument("--motion-smoke-run-id", required=True)
+    motion_generate.add_argument("--motion-smoke-review-file", required=True)
+    motion_generate.add_argument("--max-runway-credits", type=float)
+    _mode(motion_generate)
     generate = commands.add_parser("generate", help="preview or generate shot alternatives")
     _project_root(generate)
     generate.add_argument("--preset", required=True, choices=("product_page", "tooltip", "homepage"))

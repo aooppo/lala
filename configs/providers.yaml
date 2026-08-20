@@ -2,7 +2,7 @@ verified_on: "2026-08-19"
 currency: USD
 safety:
   max_talking_variations_per_shot: 3
-  max_motion_variations_per_shot: 3
+  max_motion_variations_per_shot: 5
   max_final_edits_per_video: 2
   max_concurrency: 1
   max_retries: 2

@@ -234,8 +234,8 @@ wardrobe, so it is not human-QA approved. The v4 smoke solved camera/framing dri
 identity stability, but human QA failed eyes, mouth, and motion; it is not MTL-ready.
 The v5 eye/mouth strategy corrected the prolonged eye closure and mouth opening, but external
 review found global camera/framing translation, so v5 is not MTL-ready. `prompts/home-broll-v6.txt`
-combines v4's pixel-position camera lock with v5's eye/mouth/subject lock and is awaiting live
-generation and human QA. It does not change the default, homepage establishing shot, or P1-2
+combines v4's pixel-position camera lock with v5's eye/mouth/subject lock; its single live smoke is
+awaiting human QA. It does not change the default, homepage establishing shot, or P1-2
 motion-variation prompts. The
 older v1 and v2 prompts remain available for historical evidence; v2 is immutable and is not used
 for new requests. The homepage establishing shot remains configured to use v3.

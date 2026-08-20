@@ -665,7 +665,17 @@
   `outputs/reviews/`.
 - Added `prompts/home-broll-v6.txt` as a strict combination of v4's pixel-position camera lock and
   v5's eye/mouth/subject lock. It adds no blink, breathing, head, hand, gaze-shift, or presentation
-  request. v6 is awaiting live generation and human QA; it is not approved, production-ready, or
-  MTL-ready.
+  request. Its dry-run succeeded with one planned call and zero submissions. The separately
+  authorized one-result Runway smoke succeeded as `LALA-VIDEO-20260820-052930-MOTION-SMOKE-001`
+  (task `e538580c-fccc-47f0-b176-7f31344081c7`): H.264 MP4, 1280×720, 5.041667 seconds, SHA-256
+  `e23ced6ec64be4037f25c5f9c8f433d18df2a0577739921ba5aca2c94b10fa2b`, and 25 actual credits.
+  Four-region static-background integer-pixel analysis estimated median X/Y drift at 0.0/0.0 px;
+  this is diagnostic evidence, not automatic QA. The blank-review package is under
+  `outputs/review-packages/P1-1-MOTION-SMOKE-V6-20260820/`. v6 is awaiting human QA and is not
+  approved, production-ready, or MTL-ready.
 - The v3 default, homepage establishing preset, P1-2 motion-variation prompts, and historical v1–v5
   evidence remain unchanged. P1-2 remains blocked pending P1-1 v6 human QA.
+- Verification: targeted Motion Smoke suite **10 passed**; full offline suite **198 passed**;
+  compileall, `git diff --check`, package SHA-256 verification, ZIP integrity, and secret scan passed.
+- Paid calls made in this checkpoint: **1** (the single authorized Runway P1-1 v6 smoke). No
+  P1-2, HeyGen, voice, talking, assembly, promotion, or other provider call was made.

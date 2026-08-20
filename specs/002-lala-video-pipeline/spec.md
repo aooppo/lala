@@ -196,6 +196,10 @@ contact sheet, and one blank QA row without constructing any voice or talking pr
    runs, **Then** exactly one task is submitted and its terminal result is downloaded and validated.
 3. **Given** any missing motion flag, credential, or explicit credit cap, **When** live execution is
    requested, **Then** it stops before provider construction.
+4. **Given** a technically successful motion smoke whose separate human review fails framing,
+   eyes, motion, or MTL readiness, **When** post-smoke work is requested, **Then** offline planning
+   and dry-run remain available but live provider execution stops before provider construction
+   until a later separate human review explicitly passes MTL readiness.
 
 ---
 

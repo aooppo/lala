@@ -234,9 +234,11 @@ wardrobe, so it is not human-QA approved. The v4 smoke solved camera/framing dri
 identity stability, but human QA failed eyes, mouth, and motion; it is not MTL-ready.
 The v5 eye/mouth strategy corrected the prolonged eye closure and mouth opening, but external
 review found global camera/framing translation, so v5 is not MTL-ready. `prompts/home-broll-v6.txt`
-combines v4's pixel-position camera lock with v5's eye/mouth/subject lock; its single live smoke is
-awaiting human QA. It does not change the default, homepage establishing shot, or P1-2
-motion-variation prompts. The
+combines v4's pixel-position camera lock with v5's eye/mouth/subject lock. Its technical execution
+succeeded, but Owner review failed framing, eyes, motion, and MTL readiness while passing camera
+lock, identity, and mouth. Its archived status is `P1_1_V6_SMOKE_HUMAN_QA_FAILED`; P1-1 has not
+passed. Prompt-only subject locking is not sufficient evidence for P1-1 acceptance. It does not
+change the default, homepage establishing shot, or P1-2 motion-variation prompts. The
 older v1 and v2 prompts remain available for historical evidence; v2 is immutable and is not used
 for new requests. The homepage establishing shot remains configured to use v3.
 
@@ -268,6 +270,11 @@ uv run python -m lala_workflow video motion-generate \
 Every invocation writes the standard thirteen-artifact append-only bundle and blank `review.csv`.
 Use `--dry-run` to validate the same smoke/review/hash/cap/variation gates with zero provider
 submissions.
+
+P1-2 planning, prompt loading, shot-plan and budget construction, offline tests, and dry-runs may
+continue while P1-1 is unresolved. P1-2 live provider execution remains blocked until a separate
+human-reviewed P1-1 copy explicitly passes and records `mtl_review_ready=true`; technical success
+or diagnostic evidence alone never opens the live gate.
 
 For the P1-2 planning checkpoint only, `motion-generate --dry-run` may add
 `--motion-smoke-qa-attested`. This records the owner's supplied Smoke-QA status without changing

@@ -671,10 +671,17 @@
   `e23ced6ec64be4037f25c5f9c8f433d18df2a0577739921ba5aca2c94b10fa2b`, and 25 actual credits.
   Four-region static-background integer-pixel analysis estimated median X/Y drift at 0.0/0.0 px;
   this is diagnostic evidence, not automatic QA. The blank-review package is under
-  `outputs/review-packages/P1-1-MOTION-SMOKE-V6-20260820/`. v6 is awaiting human QA and is not
-  approved, production-ready, or MTL-ready.
+  `outputs/review-packages/P1-1-MOTION-SMOKE-V6-20260820/`.
+- Owner review is now archived separately under ignored runtime evidence with Camera Lock PASS,
+  Framing FAIL, Identity PASS, Eyes FAIL, Mouth PASS, Motion FAIL, and MTL Ready FAIL. Technical
+  execution passed, but human visual acceptance failed because the subject changed position and
+  apparent scale relative to the locked background and violated the strict eyes-open target. The
+  formal status is `P1_1_V6_SMOKE_HUMAN_QA_FAILED`; the original run `review.csv` remains blank and
+  byte-unchanged. P1-1 is not passed, and v6 is not approved, production-ready, or MTL-ready.
 - The v3 default, homepage establishing preset, P1-2 motion-variation prompts, and historical v1–v5
-  evidence remain unchanged. P1-2 remains blocked pending P1-1 v6 human QA.
+  evidence remain unchanged. P1-2 offline implementation and dry-run planning are allowed, while
+  P1-2 live provider execution remains blocked until P1-1 receives an explicit human MTL-ready
+  pass. Prompt-only subject locking is no longer considered sufficient acceptance evidence.
 - Verification: targeted Motion Smoke suite **10 passed**; full offline suite **198 passed**;
   compileall, `git diff --check`, package SHA-256 verification, ZIP integrity, and secret scan passed.
 - Paid calls made in this checkpoint: **1** (the single authorized Runway P1-1 v6 smoke). No

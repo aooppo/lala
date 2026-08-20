@@ -5,6 +5,7 @@ import json
 import math
 import csv
 import shutil
+import subprocess
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
@@ -48,7 +49,7 @@ from .reporting import blank_review_rows, read_video_summary, summary_markdown
 from .review import ReviewError, load_external_review_row
 from .storage import QA_FIELDS, VideoRunContext, VideoRunStorage
 from .validation import ExternalInputBlocked
-from .downloads import generate_video_evidence
+from .downloads import generate_video_evidence, validate_media_artifact
 from .voice import resolve_approved_audio, resolve_or_synthesize_audio
 
 
@@ -1448,6 +1449,675 @@ def preview_motion_v7(project_root: Path, *, keyframe_id: str | None) -> VideoRu
     )
 
 
+def run_motion_v7_live(
+    project_root: Path,
+    *,
+    keyframe_id: str | None,
+    execute_live: bool,
+    confirm_v7_batch: bool,
+    max_runway_credits: float | None,
+    provider: Any | None = None,
+    environ: Mapping[str, str] | None = None,
+) -> VideoRunOutcome:
+    """Execute the fixed V7 A/B/C batch after one full evidence-first preflight."""
+
+    environment = os.environ if environ is None else environ
+    if not execute_live:
+        raise ExternalInputBlocked("motion-v7-live requires explicit --execute-live")
+    if not confirm_v7_batch:
+        raise ExternalInputBlocked("motion-v7-live requires explicit --confirm-v7-batch")
+    validate_live_provider_guard("runway", environment)
+
+    config = load_video_config(project_root, require_inputs=False)
+    if config.limits.max_concurrency != 1:
+        raise VideoConfigError("V7 live batch requires configured concurrency one")
+    keyframe = _keyframe(config, keyframe_id)
+    source_path = config.root / keyframe.path
+    provenance_path = config.root / keyframe.provenance_record
+    if not source_path.is_file() or sha256_file(source_path) != keyframe.sha256:
+        raise ExternalInputBlocked("approved V7 keyframe source is missing or hash-mismatched")
+    if not provenance_path.is_file():
+        raise ExternalInputBlocked("approved V7 keyframe provenance is missing")
+
+    candidates = load_v7_candidates(config.root)
+    if len(candidates) != 3:
+        raise VideoConfigError("V7 live batch requires exactly three candidates")
+    estimates: list[float] = []
+    for candidate in candidates:
+        _validate_motion_provider_settings(
+            config,
+            candidate.model,
+            candidate.duration_seconds,
+            candidate.ratio,
+            candidate.prompt,
+        )
+        estimate = candidate_credit_estimate(candidate, config.providers)
+        if estimate is None or not math.isfinite(estimate) or estimate <= 0:
+            raise ExternalInputBlocked("V7 live Runway credit estimate is unavailable")
+        estimates.append(estimate)
+    estimated_credits = sum(estimates)
+    if (
+        max_runway_credits is None
+        or not math.isfinite(max_runway_credits)
+        or max_runway_credits <= 0
+    ):
+        raise ExternalInputBlocked(
+            "motion-v7-live requires a finite positive --max-runway-credits cap"
+        )
+    if estimated_credits > max_runway_credits:
+        raise ExternalInputBlocked(
+            f"V7 live Runway credit cap exceeded: estimated {estimated_credits:g} "
+            f"> cap {max_runway_credits:g}"
+        )
+
+    plan = _v7_live_plan(candidates, keyframe)
+    if plan.provider_call_count != 3:
+        raise VideoConfigError("V7 live batch must plan exactly three submissions")
+    code_commit = _authoritative_code_commit()
+    storage = VideoRunStorage(
+        config.root,
+        secrets=(str(environment.get("RUNWAYML_API_SECRET") or ""),),
+    )
+
+    if provider is None:
+        provider = _create_motion_provider(config, environment)
+
+    # Validate a complete request batch before allocating the parent evidence run.
+    provisional = _v7_live_requests(
+        "video-motion-v7-preflight", config, keyframe, candidates, plan
+    )
+    for request in provisional:
+        provider.validate_request(request)
+
+    run = storage.create_run("motion-v7")
+    requests = _v7_live_requests(run.run_id, config, keyframe, candidates, plan)
+    for request in requests:
+        provider.validate_request(request)
+
+    candidate_metadata = [
+        {
+            **candidate.evidence(estimate),
+            "submission_state": "planned",
+            "submission_attempts": 0,
+        }
+        for candidate, estimate in zip(candidates, estimates, strict=True)
+    ]
+    started_at = datetime.now().astimezone().isoformat()
+    _write_v7_live_preflight_bundle(
+        config=config,
+        storage=storage,
+        run=run,
+        plan=plan,
+        keyframe=keyframe,
+        requests=requests,
+        candidate_metadata=candidate_metadata,
+        estimated_credits=estimated_credits,
+        max_runway_credits=max_runway_credits,
+        code_commit=code_commit,
+        started_at=started_at,
+    )
+    _verify_v7_live_preflight_evidence(
+        config=config,
+        run=run,
+        keyframe=keyframe,
+        candidate_metadata=candidate_metadata,
+        estimated_credits=estimated_credits,
+    )
+    storage.append_event(
+        run,
+        "preflight_evidence_verified",
+        {
+            "candidate_count": 3,
+            "planned_submissions": 3,
+            "estimated_runway_credits": estimated_credits,
+        },
+    )
+
+    executions: list[ExecutionRecord] = []
+    for request, estimate in zip(requests, estimates, strict=True):
+        record = _execute_v7_request_once(
+            request,
+            provider,
+            storage,
+            run,
+            config.root / "outputs/broll" / run.run_id,
+            estimate,
+        )
+        executions.append(record)
+        if record.status is not VideoTaskStatus.SUCCEEDED or not record.artifacts:
+            break
+
+    successful_count = sum(
+        1
+        for record in executions
+        if record.status is VideoTaskStatus.SUCCEEDED and record.artifacts
+    )
+    status = (
+        "SUCCEEDED"
+        if successful_count == 3
+        else ("PARTIAL" if successful_count else "FAILED")
+    )
+    _complete_v7_live_bundle(
+        config=config,
+        storage=storage,
+        run=run,
+        plan=plan,
+        candidates=candidates,
+        requests=requests,
+        executions=executions,
+        provider=provider,
+        status=status,
+        estimated_credits=estimated_credits,
+        max_runway_credits=max_runway_credits,
+        started_at=started_at,
+    )
+    storage.append_event(
+        run,
+        "motion_v7_live_completed",
+        {
+            "status": status,
+            "submission_attempts": sum(item.submission_attempts for item in executions),
+            "task_submission_count": sum(
+                1 for item in executions if item.provider_task_id
+            ),
+        },
+    )
+    storage.assert_complete(run)
+    return VideoRunOutcome(
+        run.run_id,
+        run.path,
+        run,
+        plan,
+        3,
+        sum(1 for item in executions if item.provider_task_id),
+        status,
+    )
+
+
+def _v7_live_plan(candidates: tuple[Any, ...], keyframe: ApprovedKeyframe) -> ShotPlan:
+    shots = tuple(
+        PlannedShot(
+            shot_id=candidate.candidate_id,
+            kind="motion",
+            source_role=keyframe.keyframe_id,
+            prompt=candidate.prompt,
+            duration_seconds=float(candidate.duration_seconds),
+            variation_count=1,
+            selection_required=True,
+            requests=(
+                PlannedRequest(
+                    request_id=f"motion-v7-{candidate.candidate_id}",
+                    shot_id=candidate.candidate_id,
+                    variation=index,
+                    responsibility="motion",
+                    provider="runway",
+                    model=candidate.model,
+                    duration_seconds=float(candidate.duration_seconds),
+                ),
+            ),
+        )
+        for index, candidate in enumerate(candidates, start=1)
+    )
+    return ShotPlan(
+        preset="motion-v7",
+        mode="motion_v7_live",
+        script_id="not_applicable",
+        aspect_ratio="16:9",
+        resolution="1280:720",
+        frame_rate=30,
+        shots=shots,
+        final_edit_variations=0,
+    )
+
+
+def _v7_live_requests(
+    run_id: str,
+    config: VideoProjectConfig,
+    keyframe: ApprovedKeyframe,
+    candidates: tuple[Any, ...],
+    plan: ShotPlan,
+) -> list[MotionVideoRequest]:
+    result: list[MotionVideoRequest] = []
+    for candidate, shot in zip(candidates, plan.shots, strict=True):
+        planned = shot.requests[0]
+        result.append(
+            MotionVideoRequest(
+                request_id=f"{run_id}-{planned.request_id}",
+                run_id=run_id,
+                preset="motion-v7",
+                shot_id=candidate.candidate_id,
+                variation=planned.variation,
+                provider="runway",
+                model=candidate.model,
+                image_path=config.root / keyframe.path,
+                image_sha256=keyframe.sha256,
+                prompt_path=config.root / candidate.prompt.path,
+                prompt_text=candidate.prompt.text,
+                prompt_sha256=candidate.prompt.sha256,
+                ratio=candidate.ratio,
+                duration_seconds=candidate.duration_seconds,
+                seed=None,
+                output_format="mp4",
+                timeout_seconds=config.limits.provider_timeout_seconds,
+                max_retries=0,
+            )
+        )
+    return result
+
+
+def _write_v7_live_preflight_bundle(
+    *,
+    config: VideoProjectConfig,
+    storage: VideoRunStorage,
+    run: VideoRunContext,
+    plan: ShotPlan,
+    keyframe: ApprovedKeyframe,
+    requests: list[MotionVideoRequest],
+    candidate_metadata: list[dict[str, Any]],
+    estimated_credits: float,
+    max_runway_credits: float,
+    code_commit: str,
+    started_at: str,
+) -> None:
+    comparison = build_v7_comparison()
+    storage.append_event(
+        run,
+        "live_authorized",
+        {
+            "stage": "motion_v7_live",
+            "provider": "runway",
+            "candidate_count": 3,
+            "planned_submissions": 3,
+        },
+    )
+    storage.write_json_new(
+        run,
+        "request.json",
+        {
+            "run_id": run.run_id,
+            "run_type": "P1-1 Motion V7",
+            "mode": "LIVE",
+            "action": "motion_v7_live",
+            "preset": "motion-v7",
+            "authoritative_code_commit": code_commit,
+            "provider": "runway",
+            "started_at": started_at,
+            "candidate_count": 3,
+            "planned_submissions": 3,
+            "estimated_runway_credits": estimated_credits,
+            "max_runway_credits": max_runway_credits,
+            "live_authorization": {
+                "execute_live": True,
+                "confirm_v7_batch": True,
+                "video_allow_live_calls": True,
+                "credential_present": True,
+            },
+            "requests": [to_primitive(item) for item in requests],
+            "candidate_metadata": candidate_metadata,
+            "subject_lock_comparison": comparison,
+        },
+    )
+    storage.write_yaml_new(
+        run,
+        "resolved-config.yaml",
+        {
+            "action": "motion_v7_live",
+            "live": True,
+            "canonical_live_allowed": False,
+            "provider": "runway",
+            "keyframe_id": keyframe.keyframe_id,
+            "candidate_count": 3,
+            "planned_submissions": 3,
+            "estimated_runway_credits": estimated_credits,
+            "max_runway_credits": max_runway_credits,
+            "automatic_submission_retries": 0,
+            "failure_policy": "fail_stop",
+            "candidate_metadata": candidate_metadata,
+            "subject_lock_comparison": comparison,
+            "p1_2_state": "P1_2_LIVE_BLOCKED_PENDING_P1_1_HUMAN_PASS",
+        },
+    )
+    storage.write_bytes_new(run, "script.txt", b"")
+    storage.write_json_new(
+        run, "script-hash.json", {"status": "not_applicable", "sha256": None}
+    )
+    storage.write_json_new(
+        run, "audio-hash.json", {"status": "not_applicable", "sha256": None}
+    )
+    storage.write_json_new(run, "keyframe-hash.json", _keyframe_evidence(keyframe, config))
+    storage.write_json_new(
+        run,
+        "shot-plan.json",
+        {
+            **to_primitive(plan),
+            "candidate_metadata": candidate_metadata,
+            "subject_lock_comparison": comparison,
+            "preflight_state": "VALIDATED_AWAITING_SUBMISSION",
+        },
+    )
+    storage.write_text_new(run, "edit-commands.txt", "")
+    storage.write_review_new(
+        run,
+        blank_review_rows(
+            run.run_id,
+            "motion-v7",
+            [
+                {
+                    "video_id": item["candidate_id"],
+                    "candidate": f'{item["candidate_id"]}.mp4',
+                }
+                for item in candidate_metadata
+            ],
+        ),
+    )
+    cost = estimate_plan_cost(plan, config, talking_duration_seconds=None)
+    cost.update(
+        {
+            "estimated_runway_credits": estimated_credits,
+            "max_runway_credits": max_runway_credits,
+            "actual_runway_credits": None,
+            "paid_calls": None,
+            "state": "PREFLIGHT_ESTIMATE",
+        }
+    )
+    storage.write_json_new(run, "cost.json", cost)
+
+
+def _verify_v7_live_preflight_evidence(
+    *,
+    config: VideoProjectConfig,
+    run: VideoRunContext,
+    keyframe: ApprovedKeyframe,
+    candidate_metadata: list[dict[str, Any]],
+    estimated_credits: float,
+) -> None:
+    try:
+        request = json.loads((run.path / "request.json").read_text(encoding="utf-8"))
+        plan = json.loads((run.path / "shot-plan.json").read_text(encoding="utf-8"))
+        source = json.loads((run.path / "keyframe-hash.json").read_text(encoding="utf-8"))
+        cost = json.loads((run.path / "cost.json").read_text(encoding="utf-8"))
+        with (run.path / "review.csv").open(newline="", encoding="utf-8") as handle:
+            review_rows = list(csv.DictReader(handle))
+    except (OSError, json.JSONDecodeError, csv.Error) as exc:
+        raise VideoConfigError("V7 live preflight evidence is unreadable") from exc
+    expected_ids = [item["candidate_id"] for item in candidate_metadata]
+    expected_hashes = [item["prompt_sha256"] for item in candidate_metadata]
+    if request.get("candidate_count") != 3 or request.get("planned_submissions") != 3:
+        raise VideoConfigError("V7 live request evidence count verification failed")
+    if [item.get("candidate_id") for item in request.get("candidate_metadata", [])] != expected_ids:
+        raise VideoConfigError("V7 live request evidence order verification failed")
+    if [item.get("prompt_sha256") for item in plan.get("candidate_metadata", [])] != expected_hashes:
+        raise VideoConfigError("V7 live plan prompt verification failed")
+    if source.get("sha256") != keyframe.sha256 or sha256_file(config.root / keyframe.path) != keyframe.sha256:
+        raise VideoConfigError("V7 live source evidence verification failed")
+    if cost.get("estimated_runway_credits") != estimated_credits:
+        raise VideoConfigError("V7 live credit evidence verification failed")
+    if len(review_rows) != 3 or any(
+        str(row.get(field) or "").strip()
+        for row in review_rows
+        for field in QA_FIELDS[4:]
+    ):
+        raise VideoConfigError("V7 live Human QA evidence must contain three blank rows")
+
+
+def _execute_v7_request_once(
+    request: MotionVideoRequest,
+    provider: Any,
+    storage: VideoRunStorage,
+    run: VideoRunContext,
+    output_dir: Path,
+    estimated_credits: float,
+) -> ExecutionRecord:
+    storage.append_event(
+        run,
+        "submission_attempt",
+        {"request_id": request.request_id, "attempt": 1},
+    )
+    try:
+        task_id = provider.submit(request)
+    except Exception as exc:
+        storage.append_event(
+            run,
+            "submission_failed",
+            {"request_id": request.request_id, "error": str(exc)},
+        )
+        return ExecutionRecord(
+            request.request_id,
+            None,
+            VideoTaskStatus.FAILED,
+            1,
+            (),
+            getattr(exc, "code", "provider_submission_error"),
+            str(exc),
+            estimated_credits,
+            None,
+        )
+    if not task_id:
+        return ExecutionRecord(
+            request.request_id,
+            None,
+            VideoTaskStatus.FAILED,
+            1,
+            (),
+            "provider_submission_error",
+            "provider submission returned no durable task ID",
+            estimated_credits,
+            None,
+        )
+    storage.append_event(
+        run,
+        "task_submitted",
+        {"request_id": request.request_id, "provider_task_id": task_id},
+    )
+    try:
+        result = provider.wait(task_id, request.timeout_seconds)
+    except Exception as exc:
+        return ExecutionRecord(
+            request.request_id,
+            task_id,
+            VideoTaskStatus.FAILED,
+            1,
+            (),
+            getattr(exc, "code", "provider_poll_error"),
+            str(exc),
+            estimated_credits,
+            None,
+        )
+    storage.append_event(
+        run,
+        "task_terminal",
+        {
+            "request_id": request.request_id,
+            "provider_task_id": task_id,
+            "status": result.status.value,
+            "error_code": result.error_code,
+            "error_message": result.error_message,
+            "estimated_credits": result.estimated_credits,
+            "actual_credits": result.actual_credits,
+        },
+    )
+    if result.status is not VideoTaskStatus.SUCCEEDED:
+        return ExecutionRecord(
+            request.request_id,
+            task_id,
+            result.status,
+            1,
+            (),
+            result.error_code,
+            result.error_message,
+            result.estimated_credits or estimated_credits,
+            result.actual_credits,
+        )
+    try:
+        artifacts = provider.download_results(
+            result,
+            output_dir,
+            request.request_id,
+            request.timeout_seconds,
+            0,
+        )
+        validated = tuple(validate_media_artifact(item) for item in artifacts)
+    except Exception as exc:
+        return ExecutionRecord(
+            request.request_id,
+            task_id,
+            VideoTaskStatus.FAILED,
+            1,
+            (),
+            getattr(exc, "code", "provider_download_error"),
+            str(exc),
+            result.estimated_credits or estimated_credits,
+            result.actual_credits,
+        )
+    storage.append_event(
+        run,
+        "outputs_validated",
+        {
+            "request_id": request.request_id,
+            "provider_task_id": task_id,
+            "artifacts": [item.artifact_id for item in validated],
+        },
+    )
+    return ExecutionRecord(
+        request.request_id,
+        task_id,
+        VideoTaskStatus.SUCCEEDED,
+        1,
+        validated,
+        estimated_credits=result.estimated_credits or estimated_credits,
+        actual_credits=result.actual_credits,
+    )
+
+
+def _complete_v7_live_bundle(
+    *,
+    config: VideoProjectConfig,
+    storage: VideoRunStorage,
+    run: VideoRunContext,
+    plan: ShotPlan,
+    candidates: tuple[Any, ...],
+    requests: list[MotionVideoRequest],
+    executions: list[ExecutionRecord],
+    provider: Any,
+    status: str,
+    estimated_credits: float,
+    max_runway_credits: float,
+    started_at: str,
+) -> None:
+    by_request = {item.request_id: item for item in executions}
+    result_rows: list[dict[str, Any]] = []
+    for candidate, request in zip(candidates, requests, strict=True):
+        execution = by_request.get(request.request_id)
+        if execution is None:
+            result_rows.append(
+                {
+                    "candidate_id": candidate.candidate_id,
+                    "experiment_level": candidate.experiment_level,
+                    "prompt_path": candidate.prompt.path,
+                    "prompt_sha256": candidate.prompt.sha256,
+                    "prompt_utf16_units": candidate.prompt_utf16_units,
+                    "estimated_credits": candidate_credit_estimate(candidate, config.providers),
+                    "submission_state": "not_submitted",
+                    "submission_attempts": 0,
+                    "provider_task_id": None,
+                    "provider_status": None,
+                    "error_code": None,
+                    "error_message": None,
+                    "artifacts": [],
+                }
+            )
+            continue
+        result_rows.append(
+            {
+                "candidate_id": candidate.candidate_id,
+                "experiment_level": candidate.experiment_level,
+                "prompt_path": candidate.prompt.path,
+                "prompt_sha256": candidate.prompt.sha256,
+                "prompt_utf16_units": candidate.prompt_utf16_units,
+                "estimated_credits": candidate_credit_estimate(candidate, config.providers),
+                "submission_state": (
+                    "submitted" if execution.provider_task_id else "failed"
+                ),
+                "submission_attempts": execution.submission_attempts,
+                "provider_task_id": execution.provider_task_id,
+                "provider_status": execution.status.value,
+                "error_code": execution.error_code,
+                "error_message": execution.error_message,
+                "provider_estimated_credits": execution.estimated_credits,
+                "provider_actual_credits": execution.actual_credits,
+                "artifacts": [
+                    _artifact_evidence(item, config.root) for item in execution.artifacts
+                ],
+            }
+        )
+    task_ids = [item.provider_task_id for item in executions if item.provider_task_id]
+    http_count = getattr(provider, "http_request_count", None)
+    http_known = isinstance(http_count, int) and not isinstance(http_count, bool) and http_count >= 0
+    completed_at = datetime.now().astimezone().isoformat()
+    storage.write_json_new(
+        run,
+        "provider-results.json",
+        {
+            "status": status,
+            "provider": "runway",
+            "started_at": started_at,
+            "completed_at": completed_at,
+            "planned_submissions": 3,
+            "submission_attempts": sum(item.submission_attempts for item in executions),
+            "submission_count": len(task_ids),
+            "provider_task_ids": task_ids,
+            "http_request_count": http_count if http_known else None,
+            "http_request_count_known": http_known,
+            "http_request_count_scope": "runway_api_submit_and_poll",
+            "output_download_http_request_count": None,
+            "output_download_http_request_count_known": False,
+            "automatic_retries": 0,
+            "replacement_tasks": 0,
+            "results": result_rows,
+        },
+    )
+    cost = json.loads((run.path / "cost.json").read_text(encoding="utf-8"))
+    # `cost.json` is immutable plan evidence. Actual per-task cost facts are kept in
+    # provider-results instead of rewriting it after live execution.
+    actual_values = [item.actual_credits for item in executions if item.actual_credits is not None]
+    actual_credits_text = f"{sum(actual_values):g}" if actual_values else "unknown"
+    summary = summary_markdown(
+        run_id=run.run_id,
+        preset="motion-v7",
+        status=status,
+        provider_call_count=3,
+        output_count=sum(len(item.artifacts) for item in executions),
+        total_provider_cost=cost.get("total_provider_cost"),
+    )
+    summary += (
+        "\n"
+        f"- Planned Runway credits: {estimated_credits:g}\n"
+        f"- Runway credit cap: {max_runway_credits:g}\n"
+        f"- Actual Runway credits: {actual_credits_text}\n"
+    )
+    storage.write_text_new(run, "summary.md", summary)
+
+
+def _authoritative_code_commit() -> str:
+    repository = Path(__file__).resolve().parents[3]
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(repository), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise ExternalInputBlocked(
+            "V7 live requires an authoritative repository code commit"
+        ) from exc
+    commit = completed.stdout.strip()
+    if len(commit) != 40 or any(character not in "0123456789abcdef" for character in commit):
+        raise ExternalInputBlocked("V7 live authoritative code commit is invalid")
+    return commit
+
+
 def generate_motion_variations(
     project_root: Path,
     options: VideoRunOptions,
@@ -2496,6 +3166,21 @@ def handle_video_command(args: Any) -> tuple[int, Any]:
             "status": outcome.status,
             "planned_provider_calls": outcome.provider_call_count,
             "paid_calls": 0,
+        }
+    if args.video_command == "motion-v7-live":
+        outcome = run_motion_v7_live(
+            args.project_root,
+            keyframe_id=args.keyframe,
+            execute_live=bool(args.execute_live),
+            confirm_v7_batch=bool(args.confirm_v7_batch),
+            max_runway_credits=args.max_runway_credits,
+        )
+        return (0 if outcome.status == "SUCCEEDED" else 3), {
+            "run_id": outcome.run_id,
+            "run_dir": str(outcome.run_dir),
+            "status": outcome.status,
+            "planned_provider_calls": outcome.provider_call_count,
+            "task_submission_count": outcome.submission_count,
         }
     if args.video_command == "motion-smoke-test":
         options = VideoRunOptions(

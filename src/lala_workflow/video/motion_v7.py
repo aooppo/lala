@@ -17,6 +17,21 @@ V7_CANDIDATE_IDS = (
     "v7-c-controlled-upper-bound",
 )
 
+V7_AUTHORITATIVE_PROMPTS = {
+    "v7-a-stability-first": (
+        Path("prompts/p1-1-motion-v7-a-v1.txt"),
+        "1d60886bdbc31d2d161ecd652d6f57bdc9d5b836da58c4a026386a8206c1b1ca",
+    ),
+    "v7-b-natural-micro-motion": (
+        Path("prompts/p1-1-motion-v7-b-v1.txt"),
+        "b44906b8a786564406e42d740ebb7a4e68390b88c490697b5b54de8ca11ebb67",
+    ),
+    "v7-c-controlled-upper-bound": (
+        Path("prompts/p1-1-motion-v7-c-v1.txt"),
+        "5dbaa0f0fd8c2f9ca5e83c8f661aeb598dc4e831be5e77cae34cb3a4649f0f32",
+    ),
+}
+
 
 class MotionV7Error(ValueError):
     pass
@@ -72,6 +87,19 @@ def load_v7_candidates(project_root: Path) -> tuple[MotionV7Candidate, ...]:
     candidates = tuple(_parse_candidate(root, config.providers, item) for item in items)
     if tuple(item.candidate_id for item in candidates) != V7_CANDIDATE_IDS:
         raise MotionV7Error("V7 candidates must use the canonical A/B/C order")
+    prompt_files = tuple(item.prompt_file for item in candidates)
+    if len(set(prompt_files)) != len(prompt_files):
+        raise MotionV7Error("V7 prompt mapping contains a duplicate prompt file")
+    for candidate in candidates:
+        expected_path, expected_sha256 = V7_AUTHORITATIVE_PROMPTS[candidate.candidate_id]
+        if candidate.prompt_file != expected_path:
+            raise MotionV7Error(
+                f"V7 candidate {candidate.candidate_id} has the wrong authoritative prompt mapping"
+            )
+        if candidate.prompt.sha256 != expected_sha256:
+            raise MotionV7Error(
+                f"V7 candidate {candidate.candidate_id} authoritative prompt hash differs"
+            )
     return candidates
 
 

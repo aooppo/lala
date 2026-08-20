@@ -750,3 +750,42 @@
   anchor hashes, secret scan, run artifact inspection, and `git diff --check` passed.
 - Paid calls made in this checkpoint: **0**. Runway HTTP requests/tasks, HeyGen, voice, talking,
   assembly, promotion, and all other provider calls: **0**.
+
+## Goal 2 Checkpoint 21 — P1-1 Motion V7 guarded controlled live batch implementation
+
+- Implemented the dedicated `video motion-v7-live` execution path for exactly
+  `v7-a-stability-first` → `v7-b-natural-micro-motion` → `v7-c-controlled-upper-bound`. It has no
+  candidate, subset, skip, or range selection. Canonical `configs/motion-v7.yaml` remains
+  `live_allowed: false` for all three candidates.
+- Live execution requires both `--execute-live` and `--confirm-v7-batch`, exact
+  `VIDEO_ALLOW_LIVE_CALLS=true`, a non-empty local Runway credential, and an explicit finite credit
+  cap covering the known estimator-derived batch total (currently 25 credits per candidate / 75
+  total). No live execution was performed in this checkpoint.
+- The runner prepares and validates the entire A/B/C matrix, authoritative prompt mappings/hashes,
+  UTF-16 limits, approved keyframe provenance, provider settings, all three final neutral requests,
+  known estimates, cap, authorization, and evidence destination before the first submission. It
+  then writes and verifies the parent plan evidence before A can be submitted.
+- Task creation is sequential and single-attempt: maximum one new task per candidate / three per
+  batch, automatic submission retry and replacement are disabled, and the first failure stops all
+  later candidates. Durable task IDs, provider results, output references, API HTTP accounting,
+  task-submission accounting, and not-submitted states are recorded separately in one append-only
+  13-artifact parent run.
+- Fake-provider tests exercise the same live orchestration used by the CLI. The new focused suite
+  is **16 passed**; it proves exact A/B/C
+  prompt order and association, no fourth submission, all required zero-submission preflight
+  failures (including invalid B after valid A), provider isolation, and A-success/B-error fail-stop
+  behavior with zero retries or replacements.
+- Human QA remains manual and blank in run evidence. Subject Lock remains
+  `measurement_scope=color_region_proxy` with automatic Human QA disabled and V7 diagnostics
+  `PENDING`. P1-2 remains `Offline: ALLOWED`, `Dry-run: ALLOWED`, and `Live: BLOCKED` pending an
+  explicit P1-1 Human QA plus MTL-ready pass; task or diagnostic success is not that pass.
+- Feature traceability lives in `specs/006-p1-1-motion-v7-live-batch/`. The required focused V7,
+  Motion Smoke, Subject Lock/package, P1-2, provider-preflight, secret/package regression is
+  **81 passed**; `python -m compileall .` passed; the full offline suite is **229 passed**;
+  approved-source and V7 prompt hashes, secret scan, and `git diff --check` passed. The V7 dry-run
+  regression `LALA-VIDEO-20260820-073638-MOTION-V7-001` retained 13 artifacts, three planned calls,
+  zero submissions/task IDs/paid calls, 75 estimated credits, and three blank Human QA rows.
+- Provider accounting for this implementation checkpoint: real Runway HTTP requests **0**, Runway
+  tasks **0**, paid calls **0**, HeyGen **0**, voice **0**, talking **0**, assembly **0**, promotion
+  **0**, P1-2 generation **0**, and all other providers **0**. Fake submissions occurred only in
+  automated tests and are reported separately from real accounting.

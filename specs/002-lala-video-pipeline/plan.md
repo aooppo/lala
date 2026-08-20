@@ -125,6 +125,7 @@ configs/
 prompts/
 ├── talking-motion-v1.txt
 ├── home-broll-v1.txt
+├── home-broll-v2.txt
 └── product-broll-v1.txt
 
 src/lala_workflow/

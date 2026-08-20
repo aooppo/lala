@@ -564,3 +564,23 @@
   blank-review zero-call behavior, and complete bundles.
 - New paid calls in this task: 0. The smoke dry-run completed with one planned provider call and
   zero paid calls; synthetic reviewed variation dry-runs also use zero submissions.
+
+## Goal 2 Checkpoint 13 — Motion smoke visual rejection and subject-lock prompt revision
+
+- External review copy `outputs/reviews/LALA-VIDEO-20260819-154007-MOTION-SMOKE-001-review.csv`
+  records the supplied visual QA decision: identity, face, age, eyes, motion, and MTL readiness
+  failed; hair, body proportions, wardrobe, jewelry, background, and technical export passed.
+  The original run `review.csv` remains blank and unchanged. Reviewer and review time remain blank
+  because the supplied document did not provide those human fields.
+- The rejected smoke showed Lady LaLa walking toward the foreground-left, becoming blurred/cropped,
+  and leaving the frame. No post-smoke variations were generated and no `mtl_review_ready` approval
+  was recorded.
+- Added `prompts/home-broll-v2.txt` with a stationary, fully visible subject, locked camera, and
+  explicitly prohibited walking, reframing, cropping, lip movement, and scene transitions. Motion
+  Smoke remains backward-compatible with the v1 default; the corrected smoke selects v2 explicitly,
+  while the homepage establishing shot uses v2 in its preset configuration.
+- Verification: `uv run python -m compileall -q src tests`; `uv run pytest -q` (**190 passed**);
+  the prescribed v2 Motion Smoke dry-run completed with one planned provider call and
+  `submission_count=0`, using the v2 prompt hash. No live provider call was attempted.
+- Paid calls made in this checkpoint: **0**. A new live Smoke remains conditional on explicit
+  owner authorization, exact video smoke flags, valid Runway credentials, and manual QA.

@@ -66,6 +66,12 @@ class WritingVoiceProvider:
             sha256=sha256_file(request.output_path),
             size_bytes=request.output_path.stat().st_size,
             mime_type="audio/wav",
+            provider_task_id=None,
+            provenance={
+                "provider_request_id": None,
+                "provider_request_id_present": True,
+                "submission_policy": "single_submit_no_automatic_replay",
+            },
         )
 
 
@@ -103,6 +109,13 @@ def test_cloned_voice_smoke_synthesizes_once_then_requests_one_talking_result(
     assert len(talking.submitted) == 1
     assert outcome.provider_call_count == 2
     assert outcome.submission_count == 2
+    results = json.loads(
+        (outcome.run_dir / "provider-results.json").read_text(encoding="utf-8")
+    )
+    voice_result = results["results"][0]
+    assert voice_result["provider_task_id"] is None
+    assert voice_result["artifacts"][0]["provider_task_id"] is None
+    assert voice_result["artifacts"][0]["provenance"]["provider_request_id"] is None
 
 
 class AmbiguousTalkingProvider(FakeTalkingProvider):

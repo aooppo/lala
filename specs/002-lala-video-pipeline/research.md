@@ -104,12 +104,15 @@ when configuration supplies an approved reusable private voice ID and profile.
 **Rationale**: Mode A preserves the already-approved voice and avoids cost and identity drift.
 Script and audio hashes are recorded together. HeyGen documents synchronous Starfish speech at
 `POST /v3/voices/speech`, accepting exact text, `voice_id`, `input_type`, optional speed, and
-language/locale, and returning an `audio_url`, duration, and request ID. Private cloned voices are
-discoverable through the voice-list endpoint with `type=private` and `engine=starfish`. The adapter
-downloads the result to a derived path, converts it to validated PCM WAV, and records the provider
-request ID and script hash; it never treats generated audio as an approved source. The approved
-voice profile remains a human-owned prerequisite, and Mode A still takes precedence whenever a
-script-matched WAV exists.
+language/locale, and returning a required string `audio_url`, numeric duration, nullable string
+`request_id`, and nullable word-timestamp array. A null request ID is preserved as null and never
+fabricated; defensively, an omitted request ID is handled the same way. Neither state invalidates
+an otherwise usable audio response. Private cloned voices are discoverable through the voice-list
+endpoint with `type=private` and `engine=starfish`. The adapter downloads the result to a derived
+path, converts it to validated PCM WAV, and records the provider request ID when present, its
+presence/null state, and the script hash; it never treats generated audio as an approved source.
+The approved voice profile remains a human-owned prerequisite, and Mode A still takes precedence
+whenever a script-matched WAV exists.
 
 **Official sources**:
 

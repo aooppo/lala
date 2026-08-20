@@ -222,18 +222,56 @@ class HeyGenVoiceProvider:
                 json=payload,
                 timeout=request.timeout_seconds,
             )
+        except Exception as exc:
+            detail = "[REDACTED]" if self._api_key in str(exc) else type(exc).__name__
+            raise ProviderSubmissionError(
+                f"HeyGen voice synthesis HTTP/provider request failed (detail={detail})"
+            ) from exc
+        http_context = _safe_http_context(response)
+        try:
             response.raise_for_status()
-            data = response.json().get("data") or {}
         except Exception as exc:
             raise ProviderSubmissionError(
-                redact_text(str(exc), secrets=(self._api_key,))
-                or "HeyGen voice synthesis failed"
+                f"HeyGen voice synthesis HTTP/provider error ({http_context})"
             ) from exc
-        audio_url = str(data.get("audio_url") or "")
-        provider_request_id = str(data.get("request_id") or "")
-        if not audio_url or not provider_request_id:
+        try:
+            response_payload = response.json()
+        except Exception as exc:
             raise ProviderSubmissionError(
-                "HeyGen voice synthesis returned no audio_url or request_id"
+                f"HeyGen voice synthesis returned malformed JSON ({http_context})"
+            ) from exc
+        response_shape = _safe_voice_response_shape(response_payload)
+        shape_text = _format_voice_response_shape(response_shape)
+        if not isinstance(response_payload, Mapping):
+            raise ProviderSubmissionError(
+                "HeyGen voice synthesis returned a non-object JSON root "
+                f"({http_context}; {shape_text})"
+            )
+        if "data" not in response_payload or not isinstance(
+            response_payload.get("data"), Mapping
+        ):
+            raise ProviderSubmissionError(
+                "HeyGen voice synthesis returned a missing data object "
+                f"({http_context}; {shape_text})"
+            )
+        data = response_payload["data"]
+        audio_url = str(data.get("audio_url") or "").strip()
+        if not audio_url:
+            raise ProviderSubmissionError(
+                "HeyGen voice synthesis returned missing audio_url "
+                f"({http_context}; {shape_text})"
+            )
+        request_id_present = "request_id" in data
+        raw_request_id = data.get("request_id")
+        provider_request_id = (
+            raw_request_id.strip()
+            if isinstance(raw_request_id, str) and raw_request_id.strip()
+            else None
+        )
+        if raw_request_id is not None and not isinstance(raw_request_id, str):
+            raise ProviderSubmissionError(
+                "HeyGen voice synthesis returned an invalid request_id type "
+                f"({http_context}; {shape_text})"
             )
         reported_duration = _optional_positive_float(data.get("duration"))
         request.output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -273,7 +311,9 @@ class HeyGenVoiceProvider:
                         "provider": "heygen_voice",
                         "model": request.model,
                         "provider_request_id": provider_request_id,
+                        "provider_request_id_present": request_id_present,
                         "reported_duration_seconds": reported_duration,
+                        "response_shape": response_shape,
                         "script_sha256": request.script_sha256,
                         "voice_id": request.voice_id,
                         "speed": 1.0 if request.speed is None else request.speed,
@@ -292,6 +332,116 @@ class HeyGenVoiceProvider:
                 temporary.unlink(missing_ok=True)
         message = redact_text(str(last_error or "audio download failed"), secrets=(self._api_key,))
         raise ProviderTaskError(message or "HeyGen voice audio download failed")
+
+
+def _safe_http_context(response: Any) -> str:
+    raw_status = getattr(response, "status_code", None)
+    status = raw_status if isinstance(raw_status, int) else "unknown"
+    headers = getattr(response, "headers", None)
+    raw_content_type = ""
+    if isinstance(headers, Mapping):
+        raw_content_type = str(headers.get("content-type") or "")
+    media_type = raw_content_type.split(";", 1)[0].strip().lower()
+    if media_type not in {"application/json", "application/problem+json"}:
+        media_type = "missing" if not media_type else "other"
+    return f"http_status={status}; content_type={media_type}"
+
+
+def _safe_voice_response_shape(payload: Any) -> dict[str, Any]:
+    known_root_keys = {"data", "status", "code", "error", "message"}
+    known_data_keys = {"audio_url", "duration", "request_id", "word_timestamps"}
+    if not isinstance(payload, Mapping):
+        return {
+            "root": type(payload).__name__,
+            "data": "unavailable",
+            "audio_url": "unavailable",
+            "request_id": "unavailable",
+            "duration": "unavailable",
+            "word_timestamps": "unavailable",
+            "root_keys": [],
+            "data_keys": [],
+            "root_other_key_count": 0,
+            "data_other_key_count": 0,
+        }
+    root_keys = sorted(str(key) for key in payload if str(key) in known_root_keys)
+    data_present = "data" in payload
+    data = payload.get("data")
+    if not data_present:
+        data_state = "missing"
+    elif data is None:
+        data_state = "null"
+    elif isinstance(data, Mapping):
+        data_state = "dict"
+    else:
+        data_state = type(data).__name__
+    if not isinstance(data, Mapping):
+        return {
+            "root": "dict",
+            "data": data_state,
+            "audio_url": "unavailable",
+            "request_id": "unavailable",
+            "duration": "unavailable",
+            "word_timestamps": "unavailable",
+            "root_keys": root_keys,
+            "data_keys": [],
+            "root_other_key_count": sum(
+                1 for key in payload if str(key) not in known_root_keys
+            ),
+            "data_other_key_count": 0,
+        }
+    data_keys = sorted(str(key) for key in data if str(key) in known_data_keys)
+    return {
+        "root": "dict",
+        "data": "dict",
+        "audio_url": _safe_field_state(data, "audio_url"),
+        "request_id": _safe_field_state(data, "request_id"),
+        "duration": _safe_field_state(data, "duration"),
+        "word_timestamps": _safe_field_state(data, "word_timestamps"),
+        "root_keys": root_keys,
+        "data_keys": data_keys,
+        "root_other_key_count": sum(
+            1 for key in payload if str(key) not in known_root_keys
+        ),
+        "data_other_key_count": sum(
+            1 for key in data if str(key) not in known_data_keys
+        ),
+    }
+
+
+def _safe_field_state(data: Mapping[str, Any], field: str) -> str:
+    if field not in data:
+        return "missing"
+    value = data[field]
+    if value is None:
+        return "null"
+    if isinstance(value, str):
+        return "string" if value.strip() else "empty"
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, (int, float)):
+        return "number"
+    if isinstance(value, list):
+        return "array"
+    if isinstance(value, Mapping):
+        return "object"
+    return type(value).__name__
+
+
+def _format_voice_response_shape(shape: Mapping[str, Any]) -> str:
+    return "; ".join(
+        (
+            f"root={shape['root']}",
+            f"data={shape['data']}",
+            f"audio_url={shape['audio_url']}",
+            f"request_id={shape['request_id']}",
+            f"duration={shape['duration']}",
+            f"word_timestamps={shape['word_timestamps']}",
+            f"root_keys={'|'.join(shape['root_keys']) or 'none'}",
+            f"data_keys={'|'.join(shape['data_keys']) or 'none'}",
+            f"root_other_key_count={shape['root_other_key_count']}",
+            f"data_other_key_count={shape['data_other_key_count']}",
+        )
+    )
 
 
 def _optional_positive_float(value: Any) -> float | None:

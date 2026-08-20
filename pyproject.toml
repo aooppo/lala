@@ -20,6 +20,9 @@ dependencies = [
 dev = [
   "pytest>=8.3,<9",
 ]
+ui = [
+  "streamlit>=1.49,<2",
+]
 
 [project.scripts]
 lala-workflow = "lala_workflow.cli:main"

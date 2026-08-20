@@ -9,6 +9,10 @@ motion/B-roll, deterministic edits, and final video candidates. Do not add Shopi
 ComfyUI migration, Coze orchestration, automatic face/voice scoring, creative approval, or
 automatic MTL approval.
 
+Phase 1 character switching is limited to local import, staging previews, one explicit activation,
+rejection, rollback, and compatible static provenance. It does not generate missing character
+views, auto-score identity, auto-promote keyframes/videos, or weaken Goal 1/Goal 2 human gates.
+
 ## Immutable approved sources
 
 `assets/approved_anchors/` remains the sole authoritative visual-identity source. Goal 2 also
@@ -22,6 +26,11 @@ anchors with the baseline in `PROGRESS.md`. Goal 1 derived files belong under `a
 `outputs/<run_id>/`, or `outputs/approved_keyframes/`. Goal 2 derived files belong under the
 categorized `outputs/audio/`, `talking_shots/`, `broll/`, `edits/`, `final/`, or
 `approved_videos/` directories. Promotion always copies and records provenance.
+
+Character uploads are immutable staging evidence under `assets/characters/<id>/source/`. Activation
+may copy exact validated bytes into `assets/approved_anchors/characters/<id>/`; this is the only
+approved character-authority write path and must use exclusive creation plus hash verification.
+Character previews stay under `outputs/characters/` and are never production-approved evidence.
 
 ## Architecture boundaries
 
@@ -43,6 +52,10 @@ categorized `outputs/audio/`, `talking_shots/`, `broll/`, `edits/`, `final/`, or
   video, MTL-readiness, reviewer, or approval decisions.
 - A provider task ID is an idempotency boundary. Poll or download that task within configured
   limits; never create an automatic replacement submission after an ID exists.
+- The character registry is the sole current-state pointer. Profile snapshots are immutable;
+  activation requires lock/revision CAS, prevalidated source and preview hashes, and one atomic
+  registry replacement that always exposes exactly one active character.
+- UI and character CLI commands call `CharacterService`; Streamlit imports remain lazy and optional.
 
 Substantial requirement changes use the active Spec Kit lifecycle and keep `spec.md`, `plan.md`,
 `tasks.md`, tests, and `PROGRESS.md` traceable and current.
@@ -63,6 +76,8 @@ uv run python -m lala_workflow validate
 uv run python -m lala_workflow generate --preset baseline_identity --count 10 --dry-run
 uv run python -m lala_workflow generate --preset home_decor --count 5 --dry-run
 uv run python -m lala_workflow generate --preset product_page_clean --count 5 --dry-run
+uv run python -m lala_workflow character list
+uv run python -m lala_workflow character show lala-v1
 ```
 
 Goal 2 validation and previews, after authoritative inputs are supplied:
@@ -150,3 +165,6 @@ Work is done only when:
 - An actual Goal 2 smoke/full candidate stage runs only when its authoritative inputs, credentials,
   budget permission, and preceding human review are present. Otherwise report the precise external
   blocker; absence of external approval is not a code failure.
+- Character import/build/preview/activate/reject/rollback tests prove one-active invariants,
+  copy-only exact bytes, stale-session/write-failure safety, optional UI loading, deterministic
+  character references, preview-only isolation, and legacy static/video compatibility.

@@ -844,3 +844,101 @@
 - Provider accounting for this closure: new Runway paid tasks **0**, replacement/retry generation
   **0**, HeyGen **0**, voice **0**, talking **0**, assembly **0**, P1-2 provider calls **0**, other
   paid provider calls **0**. No P1-2 Live command was run.
+## Phase 1 Character Switch Checkpoint 1 — Foundational domain and registry
+
+- Added the optional Streamlit extra, runtime character storage boundaries, immutable versioned
+  profile/build models, bounded image upload validation, role-specific safe errors, exclusive
+  source/profile writes, and a filesystem-locked single-active registry with revision CAS.
+- Checked in the `lala-v1` compatibility profile and revision-zero registry. The profile points
+  directly to the existing approved face/full-body bytes; it does not copy the shared scene or
+  invent a three-quarter source. Synthetic test projects bootstrap their own hash-bound seed.
+- Registry mutation validates both the current and proposed immutable profile snapshots before the
+  atomic fsync/replace boundary. Simulated stale revisions, invalid target profiles, and write
+  failure leave the original registry bytes unchanged.
+- Verification: foundational character tests **9 passed**; complete network-blocked offline suite
+  **238 passed** (the prior 229 plus 9 new tests); package import and compileall passed.
+- Approved-source changes: **none**. Real paid/provider calls in this checkpoint: Runway **0**,
+  HeyGen **0**, and all other providers **0**.
+
+## Phase 1 Character Switch Checkpoint 2 — Complete mocked lifecycle, UI, and CLI
+
+- Implemented collision-safe import/build, explicit → active → legacy resolution, deterministic
+  baseline/home/medium/product reference policies, optional character provenance on the unchanged
+  static provider contract, and eight-artifact static evidence with profile/source hashes.
+- Offline preview records zero calls and no fake media. The live adapter preflights static and motion
+  authorization before any submission; static is one three-reference result and motion is one
+  five-second `gen4_turbo` preview capped at 25 credits. A provider task ID is submitted once and
+  then only polled/downloaded. Fake operations verify real local image/video evidence without
+  network access; Subject Lock remains diagnostic-only.
+- Activation revalidates sources and both previews, copies exact source bytes into the approved
+  character authority, writes immutable old/new snapshots, and atomically switches the registry.
+  Rejection retains evidence; stale revision and simulated registry-write failure preserve the old
+  active ID; `lala-v1` reactivation uses the same transaction.
+- Added the shared character CLI and optional one-page Streamlit UI. Streamlit AppTest rendered
+  title `人物更换` with **0 exceptions**; the module uses absolute package imports and lazy Streamlit
+  loading. Focused character/static/video/reporting suite: **42 passed**.
+- Real provider accounting: Runway HTTP requests **0**, Runway tasks **0**, HeyGen **0**, other
+  providers **0**, paid calls **0**. All generated media in tests came from local fixtures/fakes.
+
+## Phase 1 Character Switch Checkpoint 3 — Final convergence and delivery
+
+- Architecture: `CharacterService` is the sole UI/CLI application boundary. It composes bounded
+  upload validation, collision-safe profile building, immutable YAML snapshots, strict profile/
+  source hash validation, a locked revision-CAS registry, explicit/active/legacy resolution,
+  deterministic character-plus-scene references, preview-only static/motion adapters, copy-only
+  authority promotion, rejection, and `lala-v1` rollback. Provider SDK translation remains inside
+  provider adapters; new static fields are optional provider-neutral provenance.
+- Convergence: audited FR-001–FR-034, SC-001–SC-010, all 21 acceptance scenarios, nine design
+  decisions, and five constitution principles. No remaining missing, partial, contradictory, or
+  unrequested finding was found; all **58/58** implementation tasks are complete.
+- Verification: full network-blocked suite **265 passed in 41.57s**; compileall and
+  `git diff --check` passed. Focused character/static/video suite **36 passed**. Streamlit AppTest
+  rendered seven required/optional upload controls with **0 exceptions**. `character list` and
+  `character show lala-v1` returned revision 0, one ACTIVE character, and integrity PASS.
+- Static validation passed. Dry runs retained exactly eight artifacts and recorded active
+  `lala-v1` provenance: baseline identity **10** requests
+  (`LALA-RUNWAY-20260820-110625-BASELINE-IDENTITY-001`), home decor **5**
+  (`LALA-RUNWAY-20260820-110626-HOME-DECOR-001`), and product page clean **5**
+  (`LALA-RUNWAY-20260820-110626-PRODUCT-PAGE-CLEAN-001`). All made zero submissions/outputs.
+- Goal 2 validation remains valid. Product-page, tooltip, and homepage dry runs retained exactly
+  thirteen artifacts at `LALA-VIDEO-20260820-110640-PRODUCT-PAGE-001`,
+  `LALA-VIDEO-20260820-110640-TOOLTIP-001`, and
+  `LALA-VIDEO-20260820-110641-HOMEPAGE-001`; they planned 10/4/13 provider calls, generated no
+  candidates or human QA decisions, and made zero submissions. Existing QA/promotion gates pass
+  the unchanged regression suite.
+- Secret/evidence scans found no credential values, Bearer tokens, authorization headers, signed
+  query strings, data URIs, or absolute developer paths in character/new run evidence. README
+  credential strings are explicit `set-locally-do-not-commit` examples; `.env` test values remain
+  synthetic fixtures.
+- Approved-source integrity: all 18 authoritative non-placeholder files are byte-identical to the
+  isolated pre-change workspace. Approved-anchor baseline remains face
+  `b33743fb7a4ec88ca178bb2393cdc99ebe20bf96071c0d8e332496b6ff97ac1b`, full body
+  `512dade3fe0762ac778da050c613f30250b5d4b6a270188bd85b807fddc331d9`, scene
+  `ab53d9d0551bcf926a41072567493cf640815d99ff92503d9bc111ec3ce7b9ca`, wardrobe B
+  `174aaec2242d096e4c465a8dce1a96048017d8f3ea72582316c106b41891f074`, and character sheet
+  `427006aee23b59bdaec4ae2b97d4640b7088bc12e1a0d3105d0c13f83913409d`. The approved keyframe/
+  provenance, three scripts, and eight canonical voice WAV hashes also exactly match the captured
+  pre-change values; no approved-source byte was rewritten.
+- Paid/provider accounting for the entire feature: Runway HTTP requests **0**, Runway tasks **0**,
+  HeyGen **0**, voice/talking/video **0**, other providers **0**, paid calls **0**. Live character
+  preview remains externally blocked because this task supplied no separate owner authorization;
+  it additionally requires exact static/video permission flags, the motion-smoke flag, a local
+  Runway credential, one result per stage, and the fixed at-most-25-credit motion cap.
+- Phase 1 limitations: it does not generate missing views/expressions/poses, infer identity or
+  creative quality, auto-approve keyframes/videos/MTL readiness, provide authentication/multi-user
+  workflow, deploy to cloud/Shopify, migrate old evidence, or replace existing production review
+  and promotion gates.
+
+## Phase 1 Character Switch Checkpoint 4 — Non-technical preview blocker message
+
+- Fixed the local UI leaking the operational error
+  `motion preview requires exact VIDEO_ALLOW_LIVE_CALLS=true` to ordinary users. All
+  `PreviewUnavailableError` instances now retain precise internal/CLI diagnostics while exposing a
+  stable Chinese UI message that explains the preview is temporarily unavailable, confirms the
+  profile is saved, recommends retry/contact, and confirms the active character is unchanged.
+- Added a regression assertion that the user-facing message contains neither the environment
+  variable name nor its required value. Focused UI/preview suite **7 passed**; Streamlit AppTest
+  rendered with **0 exceptions**; compileall and `git diff --check` passed; full offline suite
+  **266 passed in 43.88s**.
+- Real provider accounting for this fix: Runway **0**, HeyGen **0**, other providers **0**, paid
+  calls **0**. No approved-source or generated-media file was changed.

@@ -35,6 +35,63 @@ python -m lala_workflow validate
 
 The production dependency is pinned to the verified official Python SDK `runwayml==5.15.0`.
 
+## Phase 1 one-click character switch
+
+The optional local screen lets a non-technical operator upload one clear front photo, one full-body
+photo, and one three-quarter photo, review a static preview plus a five-second motion preview, then
+make one final **Reject** or **Approve & Activate** decision. Creation and offline preview planning
+never change the active character. Activation is the only production identity-switch boundary and
+uses a filesystem lock, expected registry revision, immutable profile snapshots, and one atomic
+registry replacement. Rollback uses the same operation to reactivate `lala-v1`.
+
+Install and start the screen:
+
+```bash
+uv sync --extra dev --extra ui
+uv run --extra ui streamlit run src/lala_workflow/ui/app.py
+```
+
+The UI dependency is optional; `uv sync --extra dev` and every existing CLI continue to work
+without importing Streamlit. The equivalent technical workflow is:
+
+```bash
+uv run python -m lala_workflow character list
+uv run python -m lala_workflow character show lala-v1
+uv run python -m lala_workflow character import \
+  --face /path/to/front.png \
+  --full-body /path/to/full-body.png \
+  --three-quarter /path/to/three-quarter.png \
+  --name "Candidate 07"
+uv run python -m lala_workflow character build CHARACTER_ID
+uv run python -m lala_workflow character preview CHARACTER_ID --dry-run
+```
+
+The default preview is a zero-call plan and leaves the character `READY_FOR_GENERATION`; it does
+not create fake media and cannot satisfy activation. A real preview additionally requires
+`--live`, exact `RUNWAY_ALLOW_LIVE_CALLS=true`, `VIDEO_ALLOW_LIVE_CALLS=true`,
+`VIDEO_MOTION_LIVE_SMOKE_TEST=true`, a local Runway credential, and a motion cap no greater than
+25 credits. Static work is one result; motion is exactly one five-second `gen4_turbo` result. Both
+gates are preflighted before the first paid call. No live call is part of installation, testing,
+dry runs, or this delivery.
+
+After visually reviewing both preview-only artifacts:
+
+```bash
+uv run python -m lala_workflow character activate CHARACTER_ID
+uv run python -m lala_workflow character reject CHARACTER_ID
+uv run python -m lala_workflow character activate lala-v1  # rollback
+```
+
+Staging uploads are exact immutable copies under `assets/characters/<id>/source/`. Activation copies
+those exact bytes into `assets/approved_anchors/characters/<id>/`; static/motion previews remain
+under `outputs/characters/<id>/` and never become production keyframes or videos automatically.
+New static evidence records character/profile/source/reference hashes while preserving the existing
+eight-file run contract. If character configuration is absent, static generation falls back to the
+unchanged legacy anchor manifest.
+
+Phase 1 does not generate missing views, score identity automatically, approve creative/MTL/video
+quality, provide multi-user authentication, deploy a cloud service, or migrate historical evidence.
+
 ## Goal 2 video pipeline
 
 Goal 2 is provider-neutral by responsibility:

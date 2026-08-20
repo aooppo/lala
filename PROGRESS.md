@@ -621,7 +621,14 @@
   is not human-QA approved.
 - Added `prompts/home-broll-v4.txt` as a Camera-Lock smoke candidate. It explicitly preserves the
   source composition and pixel positions and prohibits global scene translation, camera drift, and
-  reframing. It is awaiting dry-run, one separately authorized live smoke, and human QA; it is not
-  approved, production-ready, or MTL-ready.
+  reframing. Its explicit v4 dry-run succeeded with one planned call and zero submissions. The
+  separately authorized one-result Runway smoke succeeded as
+  `LALA-VIDEO-20260820-045551-MOTION-SMOKE-001` (task
+  `cf1f9010-5b04-485c-b64e-32568cdbc792`): H.264 MP4, 1280×720, 5.041667 seconds, SHA-256
+  `311a14556a22582d941b114531b952e4e40f0cf97137325313277924e6bb513a`, and 25 actual credits.
+  A review package is under `outputs/review-packages/P1-1-MOTION-SMOKE-V4-20260820/`; its review
+  CSV remains blank. v4 is awaiting human QA and is not approved, production-ready, or MTL-ready.
 - The v3 default, homepage establishing preset, P1-2 motion-variation prompts, and historical
   prompt evidence remain unchanged. P1-2 remains blocked pending P1-1 v4 human QA.
+- Paid calls made in this checkpoint: **1** (the single authorized Runway P1-1 v4 smoke). No
+  P1-2, HeyGen, voice, talking, or other provider call was made.

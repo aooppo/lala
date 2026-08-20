@@ -231,8 +231,8 @@ Motion Smoke defaults to the bounded `prompts/home-broll-v3.txt`. v3 uses a lock
 keeps Lady LaLa stationary and fully visible, and stays within Runway's 1000 UTF-16-unit prompt
 limit. Its external P1-1 review found camera/framing drift despite stable identity, age, and
 wardrobe, so it is not human-QA approved. `prompts/home-broll-v4.txt` is a camera-lock candidate
-for an explicitly selected P1-1 smoke only; it is awaiting dry-run, live generation, and human QA.
-It does not change the default, homepage establishing shot, or P1-2 motion-variation prompts. The
+for an explicitly selected P1-1 smoke only; its single live smoke is awaiting human QA. It does not
+change the default, homepage establishing shot, or P1-2 motion-variation prompts. The
 older v1 and v2 prompts remain available for historical evidence; v2 is immutable and is not used
 for new requests. The homepage establishing shot remains configured to use v3.
 

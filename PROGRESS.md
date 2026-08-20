@@ -655,3 +655,17 @@
   compileall, `git diff --check`, package SHA-256 verification, ZIP integrity, and secret scan passed.
 - Paid calls made in this checkpoint: **1** (the single authorized Runway P1-1 v5 smoke). No
   P1-2, HeyGen, voice, talking, assembly, promotion, or other provider call was made.
+
+## Goal 2 Checkpoint 18 — P1-1 v6 combined Camera + Eye/Mouth Lock candidate
+
+- Owner human QA accepted v5 identity, face, age, hair, body proportions, wardrobe, jewelry, eyes,
+  mouth, background, and technical export. Motion failed because static-background analysis found
+  approximately 1.5 px horizontal and 12.7 px vertical global translation; v5 is not MTL-ready.
+  The original run review remains blank, and the reviewed FAIL copy is stored outside Git under
+  `outputs/reviews/`.
+- Added `prompts/home-broll-v6.txt` as a strict combination of v4's pixel-position camera lock and
+  v5's eye/mouth/subject lock. It adds no blink, breathing, head, hand, gaze-shift, or presentation
+  request. v6 is awaiting live generation and human QA; it is not approved, production-ready, or
+  MTL-ready.
+- The v3 default, homepage establishing preset, P1-2 motion-variation prompts, and historical v1–v5
+  evidence remain unchanged. P1-2 remains blocked pending P1-1 v6 human QA.

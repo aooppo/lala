@@ -90,7 +90,7 @@ def build_video_report(project_root: Path, run_id: str) -> dict[str, Any]:
             if item.get("provider") and item.get("model")
         }
     )
-    return {
+    report = {
         "run_id": run_id,
         "mode": request.get("mode"),
         "action": request.get("action"),
@@ -105,6 +105,19 @@ def build_video_report(project_root: Path, run_id: str) -> dict[str, Any]:
         "cost": cost,
         "summary": (run_dir / "summary.md").read_text(encoding="utf-8"),
     }
+    human_fields = [field for row in review_rows for field in QA_FIELDS[4:] if str(row.get(field) or "").strip()]
+    report["human_qa_status"] = "SET" if human_fields else "NOT_SET"
+    subject_matches: list[dict[str, Any]] = []
+    for path in (root / "outputs/review-packages").glob("*/subject-lock.json"):
+        try:
+            value = _read_json(path)
+        except ValueError:
+            continue
+        if value.get("run_id") == run_id:
+            subject_matches.append(value)
+    if len(subject_matches) == 1:
+        report["subject_lock_diagnostic"] = subject_matches[0]
+    return report
 
 
 def _read_json(path: Path) -> dict[str, Any]:

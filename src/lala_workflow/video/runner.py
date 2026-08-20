@@ -1345,7 +1345,9 @@ def preview_motion_variations(
         )
     smoke, review_evidence = _validate_passing_motion_variation_smoke(
         config.root, options.smoke_run_id, options.smoke_review_file,
-        allow_owner_attestation=options.motion_smoke_qa_attested,
+        # Dry-run validates immutable review provenance and records its state, but
+        # human PASS is a live-only authorization boundary.
+        allow_owner_attestation=True,
     )
     smoke_request = _first_motion_request(smoke)
     if (smoke_request.get("keyframe_sha256") or smoke_request.get("image_sha256")) != keyframe.sha256:
@@ -1465,7 +1467,16 @@ def _write_motion_bundle(config: VideoProjectConfig, options: VideoRunOptions, p
     storage.write_json_new(run, "shot-plan.json", {**to_primitive(plan), "prompt": to_primitive(prompt)})
     storage.write_json_new(run, "provider-results.json", {"status": status, "provider": "runway", "submission_count": sum(1 for execution in executions if execution.provider_task_id), "submission_attempts": sum(execution.submission_attempts for execution in executions), "successful_outputs": len(artifacts), "failed_outputs": len(requests) - len(artifacts), "results": result_rows})
     storage.write_text_new(run, "edit-commands.txt", "")
-    storage.write_review_new(run, blank_review_rows(run.run_id, "motion", [_artifact_evidence(artifact, config.root) for artifact in artifacts]))
+    review_candidates = [_artifact_evidence(artifact, config.root) for artifact in artifacts]
+    if not review_candidates and status == "DRY_RUN_COMPLETE":
+        review_candidates = [
+            {
+                "video_id": request.request_id,
+                "candidate": f"{request.shot_id}-planned-v{request.variation:03d}.mp4",
+            }
+            for request in requests
+        ]
+    storage.write_review_new(run, blank_review_rows(run.run_id, "motion", review_candidates))
     storage.write_json_new(run, "cost.json", cost)
     storage.write_text_new(run, "summary.md", summary_markdown(run_id=run.run_id, preset="motion", status=status, provider_call_count=plan.provider_call_count, output_count=len(artifacts), total_provider_cost=cost.get("total_provider_cost")))
 
@@ -1621,26 +1632,26 @@ def _validate_passing_motion_variation_smoke(
         evidence = _validate_owner_motion_qa_attestation(
             project_root, run_dir, candidate, review_file
         )
-        return request, evidence
-    try:
-        row, evidence = _load_motion_review_copy(project_root, run_dir, candidate, review_file)
-    except ReviewError as exc:
-        raise ExternalInputBlocked(str(exc)) from exc
-    required = ("visual_identity_pass", "face_stability_pass", "hair_pass", "wardrobe_pass", "jewelry_pass", "eye_motion_pass", "background_pass", "motion_quality_pass")
-    if _truthy(row.get("legacy_motion_schema")):
-        required += ("age_stability_pass", "body_proportions_pass")
     else:
-        required += ("technical_export_pass",)
-    if any(not _truthy(row.get(field)) for field in required):
-        raise ExternalInputBlocked("motion smoke manual QA review has incomplete or failing decisions")
-    if not _truthy(row.get("mtl_review_ready")) or not str(row.get("reviewer") or "").strip():
-        raise ExternalInputBlocked("motion smoke review must be explicitly approved by a reviewer")
-    try:
-        reviewed_at = datetime.fromisoformat(str(row.get("reviewed_at") or "").replace("Z", "+00:00"))
-    except ValueError as exc:
-        raise ExternalInputBlocked("motion smoke review reviewed_at is invalid") from exc
-    if reviewed_at.tzinfo is None:
-        raise ExternalInputBlocked("motion smoke review reviewed_at must include a timezone")
+        try:
+            row, evidence = _load_motion_review_copy(project_root, run_dir, candidate, review_file)
+        except ReviewError as exc:
+            raise ExternalInputBlocked(str(exc)) from exc
+        required = ("visual_identity_pass", "face_stability_pass", "hair_pass", "wardrobe_pass", "jewelry_pass", "eye_motion_pass", "background_pass", "motion_quality_pass")
+        if _truthy(row.get("legacy_motion_schema")):
+            required += ("age_stability_pass", "body_proportions_pass")
+        else:
+            required += ("technical_export_pass",)
+        if any(not _truthy(row.get(field)) for field in required):
+            raise ExternalInputBlocked("motion smoke manual QA review has incomplete or failing decisions")
+        if not _truthy(row.get("mtl_review_ready")) or not str(row.get("reviewer") or "").strip():
+            raise ExternalInputBlocked("motion smoke review must be explicitly approved by a reviewer")
+        try:
+            reviewed_at = datetime.fromisoformat(str(row.get("reviewed_at") or "").replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ExternalInputBlocked("motion smoke review reviewed_at is invalid") from exc
+        if reviewed_at.tzinfo is None:
+            raise ExternalInputBlocked("motion smoke review reviewed_at must include a timezone")
     source_path = (project_root / str(artifact.get("path") or "")).resolve()
     outputs_root = (project_root / "outputs/broll").resolve()
     if outputs_root not in source_path.parents or not source_path.is_file():
@@ -1656,54 +1667,32 @@ def _validate_owner_motion_qa_attestation(
     candidate: str,
     review_file: Path | None,
 ) -> dict[str, Any]:
-    """Validate planning-only owner attestation without manufacturing QA fields."""
-
+    """Validate a planning-only review copy without treating it as authorization."""
     if review_file is None:
-        raise ExternalInputBlocked(
-            "owner-attested motion planning requires an immutable --motion-smoke-review-file"
-        )
-    root = project_root.resolve()
-    path = review_file if review_file.is_absolute() else root / review_file
-    path = path.resolve()
-    reviews_root = (root / "outputs/reviews").resolve()
-    if reviews_root not in path.parents or not path.is_file():
-        raise ExternalInputBlocked("review file must be an existing copy under outputs/reviews")
-    baseline_path = run_dir / "review.csv"
+        raise ExternalInputBlocked("motion planning requires an immutable --motion-smoke-review-file")
     try:
-        with baseline_path.open(newline="", encoding="utf-8") as source:
-            baseline_reader = csv.DictReader(source)
-            baseline_fields = baseline_reader.fieldnames or []
-            baseline_rows = [
-                dict(row) for row in baseline_reader if row.get("candidate") == candidate
-            ]
-        with path.open(newline="", encoding="utf-8") as source:
-            reader = csv.DictReader(source)
-            fields = reader.fieldnames or []
-            rows = [dict(row) for row in reader if row.get("candidate") == candidate]
-    except (OSError, UnicodeDecodeError, csv.Error) as exc:
-        raise ExternalInputBlocked("motion review CSV is unreadable") from exc
-    if len(baseline_rows) != 1 or len(rows) != 1 or fields != baseline_fields:
-        raise ExternalInputBlocked("owner-attested motion review provenance is invalid")
-    baseline = baseline_rows[0]
-    row = rows[0]
-    for field in ("run_id", "video_id", "preset", "candidate"):
-        if row.get(field) != baseline.get(field):
-            raise ExternalInputBlocked(
-                f"owner-attested motion review provenance mismatch: {field}"
-            )
-    human_fields = [
-        field
-        for field in baseline_fields
-        if field not in {"run_id", "video_id", "preset", "candidate"}
-    ]
-    if any(str(baseline.get(field) or "").strip() for field in human_fields):
-        raise ExternalInputBlocked(
-            "run motion review human fields must remain blank append-only evidence"
+        row, evidence = _load_motion_review_copy(
+            project_root, run_dir, candidate, review_file
         )
+    except ReviewError as exc:
+        raise ExternalInputBlocked(str(exc)) from exc
+    reviewed_fields = (
+        "visual_identity_pass", "face_stability_pass", "hair_pass", "wardrobe_pass",
+        "jewelry_pass", "eye_motion_pass", "background_pass", "motion_quality_pass",
+        "technical_export_pass", "age_stability_pass", "body_proportions_pass",
+        "mtl_review_ready", "reviewer", "reviewed_at",
+    )
+    reviewed_values = [str(row.get(field) or "").strip() for field in reviewed_fields]
+    if not any(reviewed_values):
+        review_status = "NOT_SET"
+    elif str(row.get("mtl_review_ready") or "").strip().lower() in {"false", "no", "0", "fail", "failed"}:
+        review_status = "HUMAN_QA_FAILED"
+    else:
+        review_status = "HUMAN_REVIEW_PRESENT_NOT_AUTHORIZING_DRY_RUN"
     return {
-        "path": path.relative_to(root).as_posix(),
-        "sha256": sha256_file(path),
-        "status": "passed_by_owner_instruction",
+        **evidence,
+        "status": review_status,
+        "live_authorized": False,
         "source_review_copy_unchanged": True,
     }
 
@@ -2431,6 +2420,12 @@ def handle_video_command(args: Any) -> tuple[int, Any]:
         from .reporting import build_video_report
 
         return 0, build_video_report(args.project_root, args.run_id)
+    if args.video_command == "subject-lock":
+        from .qa.review_package import finalize_subject_lock_package
+
+        return 0, finalize_subject_lock_package(
+            args.project_root, args.run_id, Path(args.package_dir)
+        )
     if args.video_command == "assemble":
         from .assembly import assemble_video
 

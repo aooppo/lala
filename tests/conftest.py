@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import shutil
 import socket
@@ -16,6 +17,8 @@ import yaml
 from PIL import Image
 
 from lala_workflow.config import load_project_config
+from lala_workflow.characters.service import bootstrap_legacy_character
+from lala_workflow.characters.domain import CharacterUpload
 from lala_workflow.domain import (
     GenerationRequest,
     OutputArtifact,
@@ -30,6 +33,22 @@ from lala_workflow.runner import RunOptions, run_generation
 
 
 SOURCE_ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.fixture
+def character_uploads():
+    def image_bytes(color: str) -> bytes:
+        output = io.BytesIO()
+        Image.new("RGB", (40, 60), color).save(output, format="PNG")
+        return output.getvalue()
+
+    return {
+        "face": CharacterUpload("face", image_bytes("red"), "front.png", "image/png"),
+        "full_body": CharacterUpload("full_body", image_bytes("green"), "body.png", "image/png"),
+        "three_quarter": CharacterUpload(
+            "three_quarter", image_bytes("blue"), "three-quarter.png", "image/png"
+        ),
+    }
 
 
 @pytest.fixture(autouse=True)
@@ -70,6 +89,10 @@ def project_root(tmp_path: Path, image_factory) -> Path:
         )
     for relative in ("runs", "outputs", "outputs/approved_keyframes", "assets/derived"):
         (tmp_path / relative).mkdir(parents=True, exist_ok=True)
+    # The checked-in seed is bound to production anchor bytes. Test projects
+    # synthesize different anchors, so bootstrap an equally immutable fixture seed.
+    shutil.rmtree(tmp_path / "configs/characters", ignore_errors=True)
+    bootstrap_legacy_character(tmp_path)
     return tmp_path
 
 

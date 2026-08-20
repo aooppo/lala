@@ -78,12 +78,19 @@ def summary_markdown(
     *,
     paid_calls: int,
 ) -> str:
+    character_line = (
+        f"- Character: `{config.character_id}` v{config.character_profile_version} "
+        f"(`{config.character_profile_sha256}`)\n"
+        if config.character_id
+        else ""
+    )
     return (
         f"# Run Summary: {result.run_id}\n\n"
         f"- Status: `{result.status.value}`\n"
         f"- Mode: `{'live' if config.live else 'dry-run'}`\n"
         f"- Preset: `{config.preset}`\n"
         f"- Provider/model: `{config.provider}` / `{config.model}`\n"
+        f"{character_line}"
         f"- Resolution: `{config.resolution}`\n"
         f"- Requested candidates: {config.count}\n"
         f"- Downloaded outputs: {len(result.outputs)}\n"

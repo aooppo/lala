@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import asdict, dataclass, fields, is_dataclass
+from dataclasses import asdict, dataclass, field, fields, is_dataclass
 from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
@@ -127,6 +127,10 @@ class GenerationRequest:
     references: tuple[ReferenceImage, ...]
     seed: int | None
     output_count: int = 1
+    character_id: str | None = None
+    character_profile_version: int | None = None
+    character_profile_sha256: str | None = None
+    character_source_hashes: Mapping[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,6 +155,10 @@ class ResolvedRunConfig:
     api_version: str
     sdk_version: str
     anchor_set_version: str
+    character_id: str | None = None
+    character_profile_version: int | None = None
+    character_profile_sha256: str | None = None
+    character_selection_source: str | None = None
 
 
 class TaskStatus(str, Enum):

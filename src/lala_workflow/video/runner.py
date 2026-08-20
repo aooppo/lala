@@ -4044,3 +4044,35 @@ def _apply_execution_cost_facts(
 
 def _truthy(value: Any) -> bool:
     return str(value or "").strip().lower() in {"true", "yes", "1", "approved", "pass"}
+def character_motion_preview_plan(
+    *,
+    character_id: str,
+    static_candidate: Path,
+    live: bool = False,
+    model: str = "gen4_turbo",
+    duration_seconds: int = 5,
+    variations: int = 1,
+    max_runway_credits: float = 25.0,
+) -> dict[str, object]:
+    """Build the isolated staging-motion contract without touching production gates.
+
+    Execution is deliberately delegated to the injected character preview operation. This helper
+    fixes the same bounded first-motion policy and marks the input/output as preview-only.
+    """
+    if not character_id or not static_candidate.is_file():
+        raise ValueError("character motion preview requires an existing staging static candidate")
+    if model != "gen4_turbo" or duration_seconds != 5 or variations != 1:
+        raise ValueError("character motion preview is fixed to one five-second gen4_turbo result")
+    if max_runway_credits <= 0 or max_runway_credits > 25:
+        raise ValueError("character motion preview credit cap must be positive and at most 25")
+    return {
+        "character_id": character_id,
+        "static_candidate": static_candidate.as_posix(),
+        "model": model,
+        "duration_seconds": duration_seconds,
+        "variations": variations,
+        "max_runway_credits": max_runway_credits,
+        "live": live,
+        "status": "CHARACTER_PREVIEW_ONLY_NOT_PRODUCTION_APPROVED",
+        "provider_tasks": 0 if not live else None,
+    }

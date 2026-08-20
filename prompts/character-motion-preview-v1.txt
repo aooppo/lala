@@ -1,0 +1,3 @@
+Keep the character, face, hairstyle, red gown, jewelry, framing, and background stable. Add only
+subtle natural breathing, a small blink, and minimal fabric movement. Camera locked, no zoom, no
+reframing, no body translation, no identity drift, no wardrobe change, no added objects or text.

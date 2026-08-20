@@ -52,6 +52,10 @@ class RunOptions:
     overall_timeout_seconds: float | None = None
     max_estimated_credits: float | None = None
     live: bool = False
+    character_id: str | None = None
+    allow_staging_character: bool = False
+    reference_names: tuple[str, ...] | None = None
+    prompt_file: Path | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,6 +73,15 @@ def run_generation(
     environment: Mapping[str, str] | None = None,
 ) -> RunOutcome:
     config = load_project_config(project_root)
+    character = None
+    registry_path = config.root / "configs/characters/registry.yaml"
+    if registry_path.is_file() or options.character_id is not None:
+        from .characters.resolver import CharacterResolver
+
+        character = CharacterResolver(config.root).resolve(
+            options.character_id, allow_staging=options.allow_staging_character
+        )
+        config = replace(config, manifest=character.manifest)
     if options.preset not in config.presets:
         raise ConfigError(f"unknown preset: {options.preset}")
     preset = config.presets[options.preset]
@@ -145,6 +158,7 @@ def run_generation(
     storage = RunStorage(config.root, secrets=(api_secret,))
 
     reference_catalog = {**config.manifest.anchors, **config.manifest.qa_references}
+    reference_names = options.reference_names or preset.references
     references = tuple(
         ReferenceImage(
             name=anchor.name,
@@ -154,11 +168,11 @@ def run_generation(
             sha256=anchor.sha256,
             mime_type=anchor.mime_type,
         )
-        for anchor in (reference_catalog[name] for name in preset.references)
+        for anchor in (reference_catalog[name] for name in reference_names)
     )
     prompt = load_prompt(
         config.root,
-        preset.prompt_file,
+        options.prompt_file or preset.prompt_file,
         selected_tags={reference.tag for reference in references},
         max_utf16_units=capabilities.prompt_utf16_max,
     )
@@ -178,6 +192,14 @@ def run_generation(
             references=references,
             seed=None if options.seed is None else options.seed + index,
             output_count=1,
+            character_id=character.profile.character_id if character else None,
+            character_profile_version=character.profile.profile_version if character else None,
+            character_profile_sha256=character.profile.profile_sha256 if character else None,
+            character_source_hashes=(
+                {name: item.sha256 for name, item in character.profile.references.items()}
+                if character
+                else {}
+            ),
         )
         for index in range(count)
     )
@@ -198,6 +220,10 @@ def run_generation(
             references=request.references,
             seed=request.seed,
             output_count=request.output_count,
+            character_id=request.character_id,
+            character_profile_version=request.character_profile_version,
+            character_profile_sha256=request.character_profile_sha256,
+            character_source_hashes=request.character_source_hashes,
         )
         for request in provisional
     )
@@ -222,6 +248,10 @@ def run_generation(
         api_version=capabilities.api_version,
         sdk_version=capabilities.sdk_version,
         anchor_set_version=config.manifest.anchor_set_version,
+        character_id=character.profile.character_id if character else None,
+        character_profile_version=character.profile.profile_version if character else None,
+        character_profile_sha256=character.profile.profile_sha256 if character else None,
+        character_selection_source=character.selection_source if character else None,
     )
     _write_input_artifacts(storage, run, config, preset.name, resolved, prompt.text, requests)
     storage.append_event(run, "validated", {"mode": "live" if options.live else "dry-run"})
@@ -586,6 +616,17 @@ def _write_input_artifacts(
         "anchor-hashes.json",
         {
             "anchor_set_version": config.manifest.anchor_set_version,
+            "character": {
+                "character_id": resolved.character_id,
+                "profile_version": resolved.character_profile_version,
+                "profile_sha256": resolved.character_profile_sha256,
+                "selection_source": resolved.character_selection_source,
+                "source_hashes": (
+                    requests[0].character_source_hashes if requests else {}
+                ),
+            }
+            if resolved.character_id
+            else None,
             "anchors": {
                 name: {
                     "path": item.path.as_posix(),

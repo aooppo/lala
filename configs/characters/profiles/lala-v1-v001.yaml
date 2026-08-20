@@ -1,0 +1,34 @@
+character_id: lala-v1
+display_name: Lady LaLa (Legacy)
+profile_version: 1
+status: ACTIVE
+created_at: '2026-08-20T00:00:00+08:00'
+created_by: legacy_migration
+references:
+  face:
+    logical_name: face
+    path: assets/approved_anchors/face/lala-face-front.png
+    sha256: b33743fb7a4ec88ca178bb2393cdc99ebe20bf96071c0d8e332496b6ff97ac1b
+    role: facial_identity
+    tag: lala_face
+    mime_type: image/png
+    width: 1448
+    height: 1086
+    size_bytes: 1956456
+    source_filename: null
+  full_body:
+    logical_name: full_body
+    path: assets/approved_anchors/full_body/lala-red-gown-full-body.png
+    sha256: 512dade3fe0762ac778da050c613f30250b5d4b6a270188bd85b807fddc331d9
+    role: body_proportions_wardrobe_and_jewelry
+    tag: lala_look
+    mime_type: image/png
+    width: 1023
+    height: 1537
+    size_bytes: 1592678
+    source_filename: null
+attributes: {}
+provenance:
+  source: legacy_anchor_manifest
+schema_version: '1.0'
+profile_sha256: 73c9367ece7834ede7123d42a2659f6bad3b54dfe39f4225c0a01f4d43f4f388

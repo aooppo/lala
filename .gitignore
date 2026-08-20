@@ -51,6 +51,16 @@ outputs/approved_videos/*
 !outputs/approved_videos/.gitkeep
 assets/derived/*
 !assets/derived/.gitkeep
+assets/characters/*
+!assets/characters/.gitkeep
+assets/approved_anchors/characters/*
+!assets/approved_anchors/characters/.gitkeep
+!outputs/characters/
+outputs/characters/*
+!outputs/characters/.gitkeep
+configs/characters/.registry.lock
+configs/characters/profiles/*
+!configs/characters/profiles/lala-v1-v001.yaml
 
 # Local agent/private state
 .agents/private/

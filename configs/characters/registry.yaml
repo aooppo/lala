@@ -1,0 +1,16 @@
+revision: 0
+active_character: lala-v1
+previous_active_character: null
+characters:
+  lala-v1:
+    character_id: lala-v1
+    display_name: Lady LaLa (Legacy)
+    status: ACTIVE
+    profile: configs/characters/profiles/lala-v1-v001.yaml
+    profile_sha256: 73c9367ece7834ede7123d42a2659f6bad3b54dfe39f4225c0a01f4d43f4f388
+    updated_at: '2026-08-20T00:00:00+08:00'
+last_event:
+  type: legacy_bootstrap
+  character_id: lala-v1
+  at: '2026-08-20T00:00:00+08:00'
+registry_version: '1.0'

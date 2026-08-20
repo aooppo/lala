@@ -642,7 +642,16 @@
   is stored outside Git under `outputs/reviews/`.
 - Added `prompts/home-broll-v5.txt` as an eye/mouth/body-lock candidate. It removes blink and
   breathing instructions, requires naturally open eyes, steady gaze, gently closed lips, and a
-  visually steady body while retaining v4's camera/framing lock. v5 is awaiting live generation
-  and human QA; it is not approved, production-ready, or MTL-ready.
+  visually steady body while retaining v4's camera/framing lock. Its dry-run succeeded with one
+  planned call and zero submissions. The separately authorized one-result Runway smoke succeeded
+  as `LALA-VIDEO-20260820-051013-MOTION-SMOKE-001` (task
+  `d3c4d0e7-ea1f-443f-a8fd-3966c789cdc4`): H.264 MP4, 1280×720, 5.041667 seconds, SHA-256
+  `c4fd95d620e0a2e854456a672fffd6e8a7542078afd280f45b3d51195ff543f1`, and 25 actual credits.
+  Its blank-review package is under `outputs/review-packages/P1-1-MOTION-SMOKE-V5-20260820/`.
+  v5 is awaiting human QA; it is not approved, production-ready, or MTL-ready.
 - The v3 default, homepage establishing preset, P1-2 motion-variation prompts, and historical v1–v4
   evidence remain unchanged. P1-2 remains blocked pending P1-1 v5 human QA.
+- Verification: targeted Motion Smoke suite **9 passed**; full offline suite **197 passed**;
+  compileall, `git diff --check`, package SHA-256 verification, ZIP integrity, and secret scan passed.
+- Paid calls made in this checkpoint: **1** (the single authorized Runway P1-1 v5 smoke). No
+  P1-2, HeyGen, voice, talking, assembly, promotion, or other provider call was made.

@@ -147,6 +147,40 @@ def preview_video(project_root: Path, options: VideoRunOptions) -> VideoRunOutco
         talking_duration_seconds=audio.duration_seconds if audio is not None else None,
     )
     preview_budgets = _budget_limits(options)
+    estimated_provider_cost = cost.get("total_provider_cost")
+    if options.action == "talking_smoke":
+        smoke_duration = audio.duration_seconds if audio is not None else 12.0
+        talking_results = sum(
+            len(shot.requests) for shot in plan.shots if shot.kind == "talking"
+        )
+        estimated_provider_cost = _estimate_talking_stage_usd(
+            config,
+            provider_name=preset.talking_provider,
+            talking_results=talking_results,
+            duration_seconds=smoke_duration,
+            include_voice=bool(plan.voice_request_count),
+            voice_results=3 if plan.voice_request_count else 1,
+        )
+        check_estimate(
+            preview_budgets,
+            provider=preset.talking_provider,
+            estimated_usd=estimated_provider_cost,
+            operation="talking smoke dry-run",
+        )
+        talking_cost = _estimate_talking_stage_usd(
+            config,
+            provider_name=preset.talking_provider,
+            talking_results=talking_results,
+            duration_seconds=smoke_duration,
+            include_voice=False,
+        )
+        cost["talking_video_cost"] = talking_cost
+        cost["voice_cost"] = (
+            round(estimated_provider_cost - talking_cost, 6)
+            if estimated_provider_cost is not None and talking_cost is not None
+            else None
+        )
+        cost["total_provider_cost"] = estimated_provider_cost
     storage = VideoRunStorage(config.root)
     run = storage.create_run(options.preset)
     storage.append_event(
@@ -166,7 +200,7 @@ def preview_video(project_root: Path, options: VideoRunOptions) -> VideoRunOutco
             "provider_call_count": plan.provider_call_count,
             "budget": _budget_evidence(
                 preview_budgets,
-                cost.get("total_provider_cost"),
+                estimated_provider_cost,
                 _estimate_motion_credits(config, plan),
             ),
             "requests": requests,
@@ -179,7 +213,7 @@ def preview_video(project_root: Path, options: VideoRunOptions) -> VideoRunOutco
             **_resolved_config(config, options, plan),
             "budget": _budget_evidence(
                 preview_budgets,
-                cost.get("total_provider_cost"),
+                estimated_provider_cost,
                 _estimate_motion_credits(config, plan),
             ),
         },
@@ -723,6 +757,7 @@ def _estimate_talking_stage_usd(
     talking_results: int,
     duration_seconds: float,
     include_voice: bool,
+    voice_results: int = 1,
 ) -> float | None:
     provider = config.providers.get(provider_name)
     if provider is None:
@@ -742,7 +777,7 @@ def _estimate_talking_stage_usd(
         voice_pricing = voice.settings.get("pricing") if voice is not None else None
         if not isinstance(voice_pricing, Mapping) or voice_pricing.get("usd_per_unit") is None:
             return None
-        amount += duration_seconds * float(voice_pricing["usd_per_unit"])
+        amount += duration_seconds * voice_results * float(voice_pricing["usd_per_unit"])
     return round(amount, 6)
 
 
@@ -897,6 +932,7 @@ def run_talking_smoke(
         talking_results=len(plan.shots[0].requests),
         duration_seconds=(audio.duration_seconds if audio is not None else 12.0),
         include_voice=bool(plan.voice_request_count),
+        voice_results=3 if plan.voice_request_count else 1,
     )
     budget_limits = _budget_limits(options)
     if provider is None or voice_provider_needed:
@@ -2152,14 +2188,9 @@ def generate_motion_variations(
     smoke_request = _first_motion_request(smoke)
     if (smoke_request.get("keyframe_sha256") or smoke_request.get("image_sha256")) != keyframe.sha256:
         raise ExternalInputBlocked("motion smoke used a different approved keyframe digest")
-    prompt_path = Path(str(smoke_request.get("prompt_path") or ""))
-    if not prompt_path.as_posix():
-        raise ExternalInputBlocked("motion smoke prompt provenance is missing")
-    if prompt_path.is_absolute():
-        try:
-            prompt_path = prompt_path.relative_to(config.root)
-        except ValueError as exc:
-            raise ExternalInputBlocked("motion smoke prompt provenance escapes project root") from exc
+    prompt_path = _portable_recorded_prompt_path(
+        config.root, smoke_request.get("prompt_path")
+    )
     try:
         prompt = load_video_prompt(config.root, prompt_path)
     except VideoPromptError as exc:
@@ -2220,12 +2251,9 @@ def preview_motion_variations(
     smoke_request = _first_motion_request(smoke)
     if (smoke_request.get("keyframe_sha256") or smoke_request.get("image_sha256")) != keyframe.sha256:
         raise ExternalInputBlocked("motion smoke used a different approved keyframe digest")
-    prompt_path = Path(str(smoke_request.get("prompt_path") or ""))
-    if prompt_path.is_absolute():
-        try:
-            prompt_path = prompt_path.relative_to(config.root)
-        except ValueError as exc:
-            raise ExternalInputBlocked("motion smoke prompt provenance escapes project root") from exc
+    prompt_path = _portable_recorded_prompt_path(
+        config.root, smoke_request.get("prompt_path")
+    )
     try:
         prompt = load_video_prompt(config.root, prompt_path)
     except VideoPromptError as exc:
@@ -2252,6 +2280,34 @@ def preview_motion_variations(
     storage.append_event(run, "dry_run_completed", {"submission_count": 0})
     storage.assert_complete(run)
     return VideoRunOutcome(run.run_id, run.path, run, plan, variations, 0, "DRY_RUN_COMPLETE")
+
+
+def _portable_recorded_prompt_path(project_root: Path, recorded_path: Any) -> Path:
+    prompt_path = Path(str(recorded_path or ""))
+    if not prompt_path.as_posix():
+        raise ExternalInputBlocked("motion smoke prompt provenance is missing")
+    if not prompt_path.is_absolute():
+        return prompt_path
+    try:
+        return prompt_path.relative_to(project_root)
+    except ValueError:
+        pass
+
+    # Older immutable run evidence stored the source worktree's absolute path.
+    # Rebind only its repository-owned prompts/ suffix; the recorded text and
+    # SHA-256 are still checked by the caller before provider construction.
+    try:
+        prompt_index = prompt_path.parts.index("prompts")
+    except ValueError as exc:
+        raise ExternalInputBlocked(
+            "motion smoke prompt provenance escapes project root"
+        ) from exc
+    rebound = Path(*prompt_path.parts[prompt_index:])
+    resolved = (project_root / rebound).resolve()
+    prompts_root = (project_root / "prompts").resolve()
+    if prompts_root not in resolved.parents:
+        raise ExternalInputBlocked("motion smoke prompt provenance escapes project root")
+    return rebound
 
 
 def _motion_plan(mode: str, prompt: ResolvedPrompt, model: str, duration: int, ratio: str, variations: int) -> ShotPlan:

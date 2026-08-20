@@ -128,6 +128,41 @@ def test_cloned_voice_dry_run_plans_one_zero_call_synthesis_with_unknown_cost(
     assert cost["total_provider_cost"] is None
 
 
+def test_talking_smoke_dry_run_uses_bounded_calibration_cost(
+    video_project_root: Path,
+) -> None:
+    profile_path = video_project_root / "configs/voice-profile.yaml"
+    profile = yaml.safe_load(profile_path.read_text(encoding="utf-8"))
+    profile.update(
+        {
+            "mode": "cloned_voice",
+            "provider": "heygen_voice",
+            "model": "starfish",
+            "voice_id": "approved-voice-id",
+            "script_audio": {},
+        }
+    )
+    profile_path.write_text(yaml.safe_dump(profile, sort_keys=False), encoding="utf-8")
+    outcome = preview_video(
+        video_project_root,
+        VideoRunOptions(
+            preset="tooltip",
+            action="talking_smoke",
+            talking_variations=1,
+            max_provider_cost_usd=1.0,
+        ),
+    )
+    request = json.loads(
+        (outcome.run_dir / "request.json").read_text(encoding="utf-8")
+    )
+    cost = json.loads((outcome.run_dir / "cost.json").read_text(encoding="utf-8"))
+
+    assert outcome.submission_count == 0
+    assert request["budget"]["accept_unknown_provider_cost"] is False
+    assert request["budget"]["estimated_provider_cost_usd"] == 0.624012
+    assert cost["total_provider_cost"] == 0.624012
+
+
 def test_live_factory_constructs_configured_heygen_voice_adapter(
     video_project_root: Path,
 ) -> None:

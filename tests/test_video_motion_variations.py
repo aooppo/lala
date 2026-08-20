@@ -196,6 +196,39 @@ def test_p1_2_prompt_candidates_are_versioned_and_within_utf16_limit(
         assert units <= 1000
 
 
+def test_v7_prompt_provenance_rebinds_across_worktrees(
+    video_project_root: Path, synthetic_video: Path
+) -> None:
+    smoke_id, review = _reviewed_v7_parent(video_project_root, synthetic_video)
+    request_path = video_project_root / "runs" / smoke_id / "request.json"
+    request = json.loads(request_path.read_text(encoding="utf-8"))
+    for item in request["requests"]:
+        prompt_name = Path(item["prompt_path"]).name
+        item["prompt_path"] = str(
+            Path("/previous/worktree/prompts") / prompt_name
+        )
+    request_path.write_text(
+        json.dumps(request, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    outcome = preview_motion_variations(
+        video_project_root,
+        VideoRunOptions(
+            preset="motion",
+            action="motion_generate",
+            keyframe_id="hero",
+            smoke_run_id=smoke_id,
+            smoke_review_file=review,
+            motion_variations=3,
+            max_runway_credits=75,
+        ),
+    )
+
+    assert outcome.status == "DRY_RUN_COMPLETE"
+    assert outcome.submission_count == 0
+
+
 def test_motion_variations_guard_budget_limit_and_zero_call_preview(video_project_root: Path, synthetic_video: Path) -> None:
     smoke_id, review = _passing_motion_smoke(video_project_root, synthetic_video)
     with pytest.raises(ExternalInputBlocked, match="cap exceeded"):

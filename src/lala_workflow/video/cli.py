@@ -60,6 +60,24 @@ def configure_parser(subparsers: Any) -> None:
     _project_root(motion_v7)
     motion_v7.add_argument("--keyframe", required=True)
 
+    motion_v7_live = commands.add_parser(
+        "motion-v7-live",
+        help="execute the fixed guarded P1-1 Motion V7 A/B/C batch",
+    )
+    _project_root(motion_v7_live)
+    motion_v7_live.add_argument("--keyframe", required=True)
+    motion_v7_live.add_argument(
+        "--execute-live",
+        action="store_true",
+        help="explicitly authorize paid V7 execution",
+    )
+    motion_v7_live.add_argument(
+        "--confirm-v7-batch",
+        action="store_true",
+        help="confirm the inseparable fixed A/B/C batch",
+    )
+    motion_v7_live.add_argument("--max-runway-credits", required=True, type=float)
+
     motion_generate = commands.add_parser(
         "motion-generate", help="generate bounded Runway motion variations after a reviewed smoke"
     )

@@ -242,9 +242,9 @@ change the default, homepage establishing shot, or P1-2 motion-variation prompts
 older v1 and v2 prompts remain available for historical evidence; v2 is immutable and is not used
 for new requests. The homepage establishing shot remains configured to use v3.
 
-### P1-1 Motion V7 targeted stability preparation
+### P1-1 Motion V7 targeted stability and guarded live batch
 
-V7 is an offline-only controlled experiment for the V6 failures: Framing, Eyes, Motion, and the
+V7 is a controlled experiment for the V6 failures: Framing, Eyes, Motion, and the
 `OUTSIDE_THRESHOLD` Subject Lock result. It provides three distinct motion rungs: Stability First,
 Natural Micro Motion, and Controlled Upper Bound. The versioned V7 prompts preserve camera lock,
 framing, identity, gaze, and background while increasing only the bounded natural micro-motion.
@@ -266,6 +266,26 @@ call. Its V6 comparison is diagnostic evidence only: V6 values are fixed and V7/
 reviewed-copy SHA-256 remains `67ceedc5ce97a9436086fd6b4ff5a3cb8026bd56c68042ddcc4c56dd6eb7ab8e`.
 V7 readiness does not unlock P1-2 Live; explicit human P1-1 pass and MTL readiness are still
 required.
+
+The guarded `motion-v7-live` path is implemented but has not been executed. It always runs the
+complete fixed batch in A → B → C order; there is no candidate/subset/skip selection. Canonical
+`configs/motion-v7.yaml` remains `live_allowed: false`. A future owner-authorized execution requires
+both `--execute-live` and `--confirm-v7-batch`, exact `VIDEO_ALLOW_LIVE_CALLS=true`, a non-empty
+local `RUNWAYML_API_SECRET`, and an explicit credit cap covering the known full-batch estimate:
+
+```bash
+uv run python -m lala_workflow video motion-v7-live \
+  --keyframe pilot_home_context \
+  --execute-live --confirm-v7-batch --max-runway-credits 75 \
+  --project-root .
+```
+
+Before candidate A can be submitted, the command prepares and validates all three prompt/source/
+provider requests, confirms the 75-credit estimate under current configuration, writes the parent
+plan evidence, and reads it back for verification. It permits at most one new task per candidate
+and three per batch, disables automatic task-creation retries, and stops on the first failure while
+preserving any durable task IDs. Human QA rows remain blank, Subject Lock remains diagnostic-only,
+and provider or diagnostic success cannot unlock P1-2 Live.
 
 ```bash
 export VIDEO_ALLOW_LIVE_CALLS=true

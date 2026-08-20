@@ -51,6 +51,7 @@ class RunwayMotionProvider:
         self.downloader = downloader
         self.max_poll_retries = max_poll_retries
         self._estimated_credits: dict[str, float] = {}
+        self.http_request_count = 0
 
     def validate_request(self, request: MotionVideoRequest) -> None:
         if request.provider != "runway":
@@ -111,6 +112,7 @@ class RunwayMotionProvider:
     def submit(self, request: MotionVideoRequest) -> str:
         payload = self.translate_request(request)
         try:
+            self.http_request_count += 1
             response = self.client.image_to_video.create(
                 **payload, timeout=min(60, request.timeout_seconds)
             )
@@ -136,6 +138,7 @@ class RunwayMotionProvider:
             if self.monotonic() - started >= timeout_seconds:
                 return VideoTaskResult(task_id, VideoTaskStatus.TIMED_OUT, error_code="timeout")
             try:
+                self.http_request_count += 1
                 response = self.client.tasks.retrieve(task_id, timeout=min(60, timeout_seconds))
             except Exception as exc:
                 consecutive_errors += 1

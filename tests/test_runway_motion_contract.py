@@ -35,6 +35,7 @@ def test_runway_tracks_submit_estimate_and_terminal_actual_credits(
     assert result.status is VideoTaskStatus.SUCCEEDED
     assert result.estimated_credits == 20
     assert result.actual_credits == 19.5
+    assert provider.http_request_count == 2
 
 
 def test_runway_optional_prompt_is_omitted_and_prompt_image_bound_is_enforced(

@@ -41,6 +41,7 @@ from .execution import (
 from .planning import build_shot_plan
 from .prompts import VideoPromptError, load_video_prompt, utf16_code_units
 from .motion_v7 import (
+    V7_CANDIDATE_IDS,
     candidate_credit_estimate,
     build_v7_comparison,
     load_v7_candidates,
@@ -2473,6 +2474,15 @@ def _validate_passing_motion_variation_smoke(
         keyframe_evidence = json.loads((run_dir / "keyframe-hash.json").read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise ExternalInputBlocked(f"motion smoke run evidence is incomplete: {run_id}") from exc
+    if request.get("action") == "motion_v7_live":
+        return _validate_passing_v7_parent(
+            project_root,
+            run_dir,
+            request,
+            results,
+            keyframe_evidence,
+            review_file,
+        )
     if request.get("action") != "motion_smoke" or results.get("status") != "SUCCEEDED":
         raise ExternalInputBlocked("motion smoke run is not a successful Runway motion result")
     request_items = request.get("requests") or []
@@ -2526,6 +2536,174 @@ def _validate_passing_motion_variation_smoke(
     if sha256_file(source_path) != artifact.get("sha256"):
         raise ExternalInputBlocked("motion smoke output hash no longer matches evidence")
     return request, evidence
+
+
+_V7_REQUIRED_PASS_FIELDS = (
+    "visual_identity",
+    "face_stability",
+    "age_stability",
+    "hair_stability",
+    "body_proportions",
+    "wardrobe",
+    "jewelry",
+    "mouth",
+    "eyes",
+    "background",
+    "motion",
+    "technical_export",
+)
+
+
+def _validate_passing_v7_parent(
+    project_root: Path,
+    run_dir: Path,
+    request: dict[str, Any],
+    results: dict[str, Any],
+    keyframe_evidence: dict[str, Any],
+    review_file: Path | None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    if results.get("status") != "SUCCEEDED":
+        raise ExternalInputBlocked("V7 parent run is not a successful Runway motion result")
+    request_items = request.get("requests") or []
+    result_items = results.get("results") or []
+    expected_ids = list(V7_CANDIDATE_IDS)
+    if (
+        len(request_items) != len(expected_ids)
+        or [item.get("shot_id") for item in request_items] != expected_ids
+        or len(result_items) != len(expected_ids)
+        or [item.get("candidate_id") for item in result_items] != expected_ids
+    ):
+        raise ExternalInputBlocked("V7 parent candidate provenance is not canonical A/B/C")
+    recorded_keyframes = {
+        item.get("image_sha256") or item.get("keyframe_sha256")
+        for item in request_items
+        if isinstance(item, dict)
+    }
+    if (
+        len(recorded_keyframes) != 1
+        or None in recorded_keyframes
+        or keyframe_evidence.get("sha256") not in recorded_keyframes
+    ):
+        raise ExternalInputBlocked("V7 parent keyframe provenance is inconsistent")
+    if review_file is None:
+        raise ExternalInputBlocked("motion generation requires an immutable --motion-smoke-review-file")
+
+    root = project_root.resolve()
+    review_path = review_file if review_file.is_absolute() else root / review_file
+    review_path = review_path.resolve()
+    try:
+        with review_path.open(newline="", encoding="utf-8") as source:
+            review_reader = csv.DictReader(source)
+            review_rows = list(review_reader)
+    except (OSError, UnicodeDecodeError, csv.Error) as exc:
+        raise ExternalInputBlocked("V7 review CSV is unreadable") from exc
+    if review_reader.fieldnames != list(QA_FIELDS):
+        raise ExternalInputBlocked("V7 review CSV does not match the exact video QA schema")
+    if (
+        len(review_rows) != len(expected_ids)
+        or [row.get("video_id") for row in review_rows] != expected_ids
+        or [row.get("candidate") for row in review_rows]
+        != [f"{candidate_id}.mp4" for candidate_id in expected_ids]
+    ):
+        raise ExternalInputBlocked("V7 review candidate provenance is not canonical A/B/C")
+
+    rows: dict[str, dict[str, str]] = {}
+    review_evidence: dict[str, str] | None = None
+    for candidate_id in expected_ids:
+        try:
+            row, evidence = load_external_review_row(
+                root,
+                run_dir,
+                f"{candidate_id}.mp4",
+                review_path,
+                require_ready=False,
+            )
+        except ReviewError as exc:
+            raise ExternalInputBlocked(str(exc)) from exc
+        rows[candidate_id] = row
+        review_evidence = evidence
+
+    passing_ids = [
+        candidate_id
+        for candidate_id, row in rows.items()
+        if all(_truthy(row.get(field)) for field in _V7_REQUIRED_PASS_FIELDS)
+        and _truthy(row.get("mtl_review_ready"))
+    ]
+    if len(passing_ids) != 1:
+        raise ExternalInputBlocked("V7 review must contain exactly one unique passing candidate")
+    selected_id = passing_ids[0]
+    for candidate_id, row in rows.items():
+        _validate_review_attribution(row, candidate_id)
+        if candidate_id != selected_id and str(row.get("mtl_review_ready") or "").strip().lower() not in {
+            "false",
+            "no",
+            "0",
+            "fail",
+            "failed",
+        }:
+            raise ExternalInputBlocked(
+                "V7 non-selected candidates require an explicit overall human FAIL"
+            )
+
+    selected_request: dict[str, Any] | None = None
+    outputs_root = (root / "outputs/broll" / run_dir.name).resolve()
+    for candidate_id, request_item, result_item in zip(
+        expected_ids, request_items, result_items, strict=True
+    ):
+        artifacts = result_item.get("artifacts") or []
+        if (
+            len(artifacts) != 1
+            or not result_item.get("provider_task_id")
+            or artifacts[0].get("provider_task_id") != result_item.get("provider_task_id")
+        ):
+            raise ExternalInputBlocked("V7 candidate task/output provenance is incomplete")
+        artifact = artifacts[0]
+        if (
+            result_item.get("candidate_id") != candidate_id
+            or request_item.get("shot_id") != candidate_id
+            or artifact.get("artifact_id") != request_item.get("request_id")
+            or artifact.get("video_id") != request_item.get("request_id")
+            or artifact.get("candidate") != f'{request_item.get("request_id")}.mp4'
+        ):
+            raise ExternalInputBlocked("V7 candidate task/output provenance is inconsistent")
+        source_path = (root / str(artifact.get("path") or "")).resolve()
+        if outputs_root not in source_path.parents or not source_path.is_file():
+            raise ExternalInputBlocked("V7 candidate media is missing or outside its broll run")
+        if sha256_file(source_path) != artifact.get("sha256"):
+            raise ExternalInputBlocked("V7 candidate media hash no longer matches evidence")
+        if candidate_id == selected_id:
+            selected_request = dict(request_item)
+    if selected_request is None:
+        raise ExternalInputBlocked("V7 selected candidate request provenance is missing")
+
+    selected_parent = dict(request)
+    selected_parent["requests"] = [selected_request]
+    selected_parent["selected_candidate_id"] = selected_id
+    return selected_parent, {
+        **dict(review_evidence or {}),
+        "status": "P1_2_LIVE_READY",
+        "live_authorized": True,
+        "selected_candidate_id": selected_id,
+        "human_qa_authority": "HUMAN",
+        "automatic_human_qa": False,
+        "source_review_copy_unchanged": True,
+    }
+
+
+def _validate_review_attribution(row: Mapping[str, Any], candidate_id: str) -> None:
+    if not str(row.get("reviewer") or "").strip():
+        raise ExternalInputBlocked(f"V7 candidate reviewer is required: {candidate_id}")
+    raw_time = str(row.get("reviewed_at") or "").strip()
+    try:
+        reviewed_at = datetime.fromisoformat(raw_time.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ExternalInputBlocked(
+            f"V7 candidate reviewed_at is invalid: {candidate_id}"
+        ) from exc
+    if reviewed_at.tzinfo is None:
+        raise ExternalInputBlocked(
+            f"V7 candidate reviewed_at must include a timezone: {candidate_id}"
+        )
 
 
 def _validate_owner_motion_qa_attestation(

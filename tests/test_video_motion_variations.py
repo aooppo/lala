@@ -15,6 +15,7 @@ from lala_workflow.video.runner import (
     generate_motion_variations,
     preview_motion_variations,
     run_motion_smoke,
+    run_motion_v7_live,
 )
 from lala_workflow.video.storage import QA_FIELDS, VIDEO_RUN_FILES
 from lala_workflow.video.validation import ExternalInputBlocked
@@ -22,6 +23,20 @@ from tests.fakes_video import FakeMotionProvider
 
 
 PASS_FIELDS = QA_FIELDS[4:18]
+V7_PASS_FIELDS = (
+    "visual_identity",
+    "face_stability",
+    "age_stability",
+    "hair_stability",
+    "body_proportions",
+    "wardrobe",
+    "jewelry",
+    "mouth",
+    "eyes",
+    "background",
+    "motion",
+    "technical_export",
+)
 
 
 def _motion_fixture(source: Path) -> Path:
@@ -74,6 +89,50 @@ def _passing_motion_smoke(root: Path, synthetic_video: Path) -> tuple[str, Path]
         writer = csv.DictWriter(output, fieldnames=QA_FIELDS)
         writer.writeheader()
         writer.writerow(row)
+    return outcome.run_id, review
+
+
+def _reviewed_v7_parent(
+    root: Path, synthetic_video: Path
+) -> tuple[str, Path]:
+    outcome = run_motion_v7_live(
+        root,
+        keyframe_id="hero",
+        execute_live=True,
+        confirm_v7_batch=True,
+        max_runway_credits=75,
+        provider=FakeMotionProvider(_motion_fixture(synthetic_video)),
+        environ={
+            "VIDEO_ALLOW_LIVE_CALLS": "true",
+            "RUNWAYML_API_SECRET": "fixture-only",
+        },
+    )
+    review = root / "outputs/reviews" / f"{outcome.run_id}-review.csv"
+    review.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(outcome.run_dir / "review.csv", review)
+    with review.open(newline="", encoding="utf-8") as source:
+        rows = list(csv.DictReader(source))
+    for row in rows:
+        row.update(
+            {
+                "mtl_review_ready": "false",
+                "reviewer": "Fixture human reviewer",
+                "reviewed_at": "2026-08-20T16:43:46+08:00",
+                "notes": "Explicit human FAIL",
+            }
+        )
+    for field in V7_PASS_FIELDS:
+        rows[0][field] = "true"
+    rows[0].update(
+        {
+            "mtl_review_ready": "true",
+            "notes": "Explicit human PASS; selected V7-A",
+        }
+    )
+    with review.open("w", newline="", encoding="utf-8") as output:
+        writer = csv.DictWriter(output, fieldnames=QA_FIELDS)
+        writer.writeheader()
+        writer.writerows(rows)
     return outcome.run_id, review
 
 
@@ -380,5 +439,143 @@ def test_p1_2_live_blocked_when_p1_1_failed_before_provider_construction(
                 max_runway_credits=75,
             ),
             environ={"VIDEO_ALLOW_LIVE_CALLS": "true", "RUNWAYML_API_SECRET": "fixture-only"},
+        )
+    assert constructions == []
+
+
+def test_p1_2_v7_parent_selects_unique_passing_candidate_offline(
+    video_project_root: Path, synthetic_video: Path
+) -> None:
+    run_id, review = _reviewed_v7_parent(video_project_root, synthetic_video)
+
+    outcome = preview_motion_variations(
+        video_project_root,
+        VideoRunOptions(
+            preset="motion",
+            action="motion_generate",
+            keyframe_id="hero",
+            smoke_run_id=run_id,
+            smoke_review_file=review,
+            motion_variations=3,
+            max_runway_credits=75,
+        ),
+    )
+
+    request = json.loads((outcome.run_dir / "request.json").read_text())
+    results = json.loads((outcome.run_dir / "provider-results.json").read_text())
+    assert outcome.status == "DRY_RUN_COMPLETE"
+    assert outcome.submission_count == 0
+    assert request["motion_smoke_review"]["status"] == "P1_2_LIVE_READY"
+    assert request["motion_smoke_review"]["selected_candidate_id"] == (
+        "v7-a-stability-first"
+    )
+    assert request["requests"][0]["prompt_sha256"] == (
+        "1d60886bdbc31d2d161ecd652d6f57bdc9d5b836da58c4a026386a8206c1b1ca"
+    )
+    assert results["submission_count"] == 0
+    assert results["results"] == []
+
+
+def test_p1_2_v7_parent_rejects_ambiguous_human_pass_before_provider_construction(
+    video_project_root: Path, synthetic_video: Path, monkeypatch
+) -> None:
+    run_id, review = _reviewed_v7_parent(video_project_root, synthetic_video)
+    with review.open(newline="", encoding="utf-8") as source:
+        rows = list(csv.DictReader(source))
+    for field in V7_PASS_FIELDS:
+        rows[1][field] = "true"
+    rows[1]["mtl_review_ready"] = "true"
+    with review.open("w", newline="", encoding="utf-8") as output:
+        writer = csv.DictWriter(output, fieldnames=QA_FIELDS)
+        writer.writeheader()
+        writer.writerows(rows)
+    constructions: list[bool] = []
+    monkeypatch.setattr(
+        runner_module,
+        "_create_motion_provider",
+        lambda *_args, **_kwargs: constructions.append(True),
+    )
+
+    with pytest.raises(ExternalInputBlocked, match="exactly one|unique"):
+        generate_motion_variations(
+            video_project_root,
+            VideoRunOptions(
+                preset="motion",
+                action="motion_generate",
+                live=True,
+                keyframe_id="hero",
+                smoke_run_id=run_id,
+                smoke_review_file=review,
+                motion_variations=1,
+                max_runway_credits=25,
+            ),
+            environ={
+                "VIDEO_ALLOW_LIVE_CALLS": "true",
+                "RUNWAYML_API_SECRET": "fixture-only",
+            },
+        )
+    assert constructions == []
+
+
+def test_p1_2_v7_parent_rejects_review_provenance_mismatch(
+    video_project_root: Path, synthetic_video: Path
+) -> None:
+    run_id, review = _reviewed_v7_parent(video_project_root, synthetic_video)
+    with review.open(newline="", encoding="utf-8") as source:
+        rows = list(csv.DictReader(source))
+    rows[0]["candidate"] = "not-the-parent-candidate.mp4"
+    with review.open("w", newline="", encoding="utf-8") as output:
+        writer = csv.DictWriter(output, fieldnames=QA_FIELDS)
+        writer.writeheader()
+        writer.writerows(rows)
+
+    with pytest.raises(ExternalInputBlocked, match="provenance|candidate"):
+        preview_motion_variations(
+            video_project_root,
+            VideoRunOptions(
+                preset="motion",
+                action="motion_generate",
+                keyframe_id="hero",
+                smoke_run_id=run_id,
+                smoke_review_file=review,
+                motion_variations=1,
+                max_runway_credits=25,
+            ),
+        )
+
+
+def test_p1_2_v7_parent_rejects_selected_media_hash_drift_before_provider_construction(
+    video_project_root: Path, synthetic_video: Path, monkeypatch
+) -> None:
+    run_id, review = _reviewed_v7_parent(video_project_root, synthetic_video)
+    results = json.loads(
+        (video_project_root / "runs" / run_id / "provider-results.json").read_text()
+    )
+    selected = video_project_root / results["results"][0]["artifacts"][0]["path"]
+    selected.write_bytes(selected.read_bytes() + b"drift")
+    constructions: list[bool] = []
+    monkeypatch.setattr(
+        runner_module,
+        "_create_motion_provider",
+        lambda *_args, **_kwargs: constructions.append(True),
+    )
+
+    with pytest.raises(ExternalInputBlocked, match="hash"):
+        generate_motion_variations(
+            video_project_root,
+            VideoRunOptions(
+                preset="motion",
+                action="motion_generate",
+                live=True,
+                keyframe_id="hero",
+                smoke_run_id=run_id,
+                smoke_review_file=review,
+                motion_variations=1,
+                max_runway_credits=25,
+            ),
+            environ={
+                "VIDEO_ALLOW_LIVE_CALLS": "true",
+                "RUNWAYML_API_SECRET": "fixture-only",
+            },
         )
     assert constructions == []

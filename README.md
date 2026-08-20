@@ -264,12 +264,12 @@ call. Its V6 comparison is diagnostic evidence only: V6 values are fixed and V7/
 `PENDING` until a later real V7 video is analyzed. The V6 blank review SHA-256 remains
 `c04e271773e31f81744f94602a9ed782b1a8b792bdbbdaa2e81c704a9b86fa31`; its separately archived
 reviewed-copy SHA-256 remains `67ceedc5ce97a9436086fd6b4ff5a3cb8026bd56c68042ddcc4c56dd6eb7ab8e`.
-V7 readiness does not unlock P1-2 Live; explicit human P1-1 pass and MTL readiness are still
+V7 planning alone does not unlock P1-2 Live; an explicit human P1-1 pass and MTL readiness are
 required.
 
-The guarded `motion-v7-live` path is implemented but has not been executed. It always runs the
-complete fixed batch in A → B → C order; there is no candidate/subset/skip selection. Canonical
-`configs/motion-v7.yaml` remains `live_allowed: false`. A future owner-authorized execution requires
+The guarded `motion-v7-live` path always runs the complete fixed batch in A → B → C order; there is
+no candidate/subset/skip selection. Canonical `configs/motion-v7.yaml` remains
+`live_allowed: false`. Any separately owner-authorized execution requires
 both `--execute-live` and `--confirm-v7-batch`, exact `VIDEO_ALLOW_LIVE_CALLS=true`, a non-empty
 local `RUNWAYML_API_SECRET`, and an explicit credit cap covering the known full-batch estimate:
 
@@ -286,6 +286,30 @@ plan evidence, and reads it back for verification. It permits at most one new ta
 and three per batch, disables automatic task-creation retries, and stops on the first failure while
 preserving any durable task IDs. Human QA rows remain blank, Subject Lock remains diagnostic-only,
 and provider or diagnostic success cannot unlock P1-2 Live.
+
+The separately authorized fixed batch `LALA-VIDEO-20260820-075843-MOTION-V7-001` completed all
+three original Runway tasks. Its append-only run review remains blank. The Owner's later explicit
+review is stored only in
+`outputs/reviews/LALA-VIDEO-20260820-075843-MOTION-V7-001-review.csv`: V7-A Stability First PASS,
+V7-B Natural Micro Motion FAIL, and V7-C Controlled Upper Bound FAIL/reserve. V7-A is the unique
+P1-1 winner and is explicitly MTL-ready. This is HUMAN authority; automatic Human QA is false.
+The reviewed copy maps Camera Lock to `background` and Framing to `body_proportions` under the
+existing exact schema.
+
+P1-2's existing motion prerequisite now also accepts a successful canonical V7 parent only when
+its external review contains exactly one fully passing, MTL-ready candidate, all three decisions
+have human attribution, and every task/media/hash fact remains valid. It returns only the selected
+candidate's prompt/keyframe provenance to downstream planning. Ambiguous, failing, mismatched, or
+mutated V7 evidence is rejected before provider construction. This establishes
+`P1_2_LIVE_READY`; it does not execute P1-2 or replace the independent live command, credential,
+environment, count, and budget guards. The closure proof run
+`LALA-VIDEO-20260820-084806-MOTION-GENERATE-001` planned three variations and made zero submissions,
+task IDs, provider constructions, or paid calls.
+
+The formal V7 diagnostics state remains `POST_LIVE_DIAGNOSTIC_ENTRYPOINT_NOT_AVAILABLE` because
+the existing Subject Lock command accepts a single-result `motion_smoke` package, not a
+three-candidate `motion_v7_live` parent. Human PASS remains authoritative; no Subject Lock
+algorithm, threshold, V6 baseline, or V7 diagnostic value was changed or fabricated.
 
 ```bash
 export VIDEO_ALLOW_LIVE_CALLS=true
@@ -316,10 +340,11 @@ Every invocation writes the standard thirteen-artifact append-only bundle and bl
 Use `--dry-run` to validate the same smoke/review/hash/cap/variation gates with zero provider
 submissions.
 
-P1-2 planning, prompt loading, shot-plan and budget construction, offline tests, and dry-runs may
-continue while P1-1 is unresolved. P1-2 live provider execution remains blocked until a separate
-human-reviewed P1-1 copy explicitly passes and records `mtl_review_ready=true`; technical success
-or diagnostic evidence alone never opens the live gate.
+P1-2 planning, prompt loading, shot-plan and budget construction, offline tests, and dry-runs are
+available. P1-2 live provider execution requires a separate human-reviewed P1-1 copy that
+explicitly passes and records `mtl_review_ready=true`; technical success or diagnostic evidence
+alone never opens the live gate. The reviewed V7-A copy now satisfies that P1-1 prerequisite, but
+no P1-2 Live execution is authorized or performed by the closure.
 
 Subject Lock diagnostics now quantify subject-proxy position and apparent scale independently
 from camera/background lock. They use a deterministic local `color_region_proxy` for Lady LaLa's

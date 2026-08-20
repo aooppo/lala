@@ -789,3 +789,58 @@
   tasks **0**, paid calls **0**, HeyGen **0**, voice **0**, talking **0**, assembly **0**, promotion
   **0**, P1-2 generation **0**, and all other providers **0**. Fake submissions occurred only in
   automated tests and are reported separately from real accounting.
+
+## Goal 2 Checkpoint 22 — P1-1 V7 Human QA closure and P1-2 unlock
+
+- The separately authorized fixed live parent run
+  `LALA-VIDEO-20260820-075843-MOTION-V7-001` is now archived as executed and media-valid. Its three
+  original Runway tasks remain `9a4c1f1d-4571-4bdd-932b-e10a58f680d3`,
+  `be188963-5576-417b-a037-3eb94866343f`, and
+  `eb5fa0c5-5d69-40e6-a327-972087b996c4`; the corresponding media SHA-256 values remain
+  `79400f291c47dbf5f67d84e779f995b6cde835ce7c10ef8c3bbb7f64ec3505cb`,
+  `e55e64bc46debf7e5465b4acb5c44aec55c79a5d21fe65fda74c7f927ea158d2`, and
+  `fb66a9f889a53ba58656efc68e98225159a227083c6af8a0bc9b46e0ffb94727`. The source run used three
+  previously authorized tasks / 75 Runway credits; this closure created no replacement or retry.
+- The Owner's explicit human review is stored only in ignored
+  `outputs/reviews/LALA-VIDEO-20260820-075843-MOTION-V7-001-review.csv` (SHA-256
+  `2b6a4b028526d0ccd51042530508f7d383b4a9e3e724f852c069206f99330cea`). V7-A Stability First is
+  PASS and the unique P1-1 winner; V7-B is FAIL; V7-C is formally FAIL and retained as reserve.
+  V7-A records human PASS for Camera Lock (`background`), Framing (`body_proportions`), Identity,
+  Eyes, Mouth, Motion, technical export, overall decision, and MTL readiness. Authority is HUMAN
+  from the explicit Owner decision; automatic Human QA is false. The append-only parent
+  `review.csv` remains blank and byte-unchanged at SHA-256
+  `1188628ec6ec759a3f001d30a4779d5ff4bb68de1aba61b2481772f531637a88`.
+- The existing P1-2 motion prerequisite gate now accepts a successful canonical three-candidate
+  `motion_v7_live` parent only when the external review has exactly one fully passing/MTL-ready
+  candidate, all three rows have human attribution, B/C have explicit overall FAIL, and every
+  request/task/media/hash fact is intact. It selects only V7-A's prompt/keyframe provenance.
+  Ambiguity, provenance mismatch, incomplete review, and media drift reject before provider
+  construction. Legacy single-result `motion_smoke` behavior remains supported.
+- Offline readiness proof `LALA-VIDEO-20260820-084806-MOTION-GENERATE-001` wrote the standard 13
+  artifacts, reported `P1_2_LIVE_READY`, selected V7-A, planned three calls / 75 credits, and made
+  zero provider constructions, submissions, task IDs, HTTP requests, or paid calls. P1-2 Live was
+  not executed and still independently requires its explicit live command, permission, credential,
+  input, count, and budget guards.
+- Diagnostics remain honestly
+  `P1_1_V7_DIAGNOSTICS_POST_LIVE_DIAGNOSTIC_ENTRYPOINT_NOT_AVAILABLE`: the existing Subject Lock
+  entrypoint is legal only for one-result `motion_smoke` packages. Human PASS is authoritative.
+  Algorithm modified: NO; thresholds modified: NO; V6 baseline modified: NO; fabricated V7
+  diagnostics: NO.
+- The original pre-human-review ZIP remains byte-unchanged at SHA-256
+  `268842f10553856b821496f8d76662bee2419069b443aeb55f48c7781fcb25ef`. The separate deterministic
+  closure ZIP is
+  `outputs/packages/P1-1-V7-LALA-VIDEO-20260820-075843-MOTION-V7-001-human-qa-closure.zip`, SHA-256
+  `9a33f122fb80877df020b98fea8ea5a1ba6169b7af201974b7bcfd0b4630c3d4`; all 33 checksummed files
+  and 34 ZIP members passed integrity, and 31 package text files passed secret scan.
+- Feature traceability lives in `specs/007-p1-1-v7-human-qa-closure/`. Focused V7/review/P1-2/
+  Subject Lock regression is **38 passed**; full offline suite is **233 passed**; compileall,
+  `video validate` (`paid_calls: 0`), `git diff --check`, package verification, and a 337-file
+  high-confidence repository/runtime secret scan passed. All 26 approved-source files retained
+  their pre-closure SHA-256 values and all five approved-anchor hashes match Checkpoint 1.
+- Canonical closure state is `P1_1_V7_LIVE_BATCH_EXECUTED`,
+  `P1_1_V7_LIVE_MEDIA_VALIDATED`, `P1_1_V7_HUMAN_QA_PASS`,
+  `P1_1_V7_SELECTED_CANDIDATE_V7_A`, `P1_1_MTL_READY`, `P1_2_OFFLINE_READY`, and
+  `P1_2_LIVE_READY`, while the diagnostics-entrypoint gap remains retained.
+- Provider accounting for this closure: new Runway paid tasks **0**, replacement/retry generation
+  **0**, HeyGen **0**, voice **0**, talking **0**, assembly **0**, P1-2 provider calls **0**, other
+  paid provider calls **0**. No P1-2 Live command was run.

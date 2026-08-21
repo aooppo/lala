@@ -447,8 +447,11 @@ uv run python -m lala_workflow video generate \
   --smoke-review-file outputs/reviews/LALA-VIDEO-SMOKE-RUN-review.csv \
   --motion-smoke-run-id LALA-VIDEO-MOTION-SMOKE-RUN \
   --motion-smoke-review-file outputs/reviews/LALA-VIDEO-MOTION-SMOKE-RUN-review.csv \
-  --max-provider-cost-usd 1.00 \
-  --max-runway-credits 100 \
+  --talking-variations 1 \
+  --motion-variations 1 \
+  --max-talking-duration-seconds 45 \
+  --max-provider-cost-usd 3.00 \
+  --max-runway-credits 40 \
   --live
 ```
 
@@ -516,10 +519,18 @@ covering sources, scripts, selected shots, providers/models, hashes, the review-
 reviewer, and dates.
 
 Provider capability and pricing evidence is dated in
-`specs/002-lala-video-pipeline/research.md`. Unknown voice, storage, or provider costs remain JSON
-`null`; the workflow never fabricates zero or an aggregate. All Goal 2 automated provider clients,
-downloads, clocks, and network behavior are fakes, while one test performs a real local FFmpeg
-export.
+`specs/002-lala-video-pipeline/research.md`. For cloned-voice pilots, exact HeyGen cost is unknown
+before TTS because both Starfish speech and Avatar IV are billed by output duration. The explicit
+`--max-talking-duration-seconds` value is a post-TTS workflow gate, not a provider-enforced speech
+limit: dry-run records known unit rates, `TOTAL_EXACT_UNKNOWN_UNTIL_TTS`, and the cost projection at
+that duration limit. After the WAV is downloaded, the runner measures its real duration, recomputes
+voice, talking, Runway, and total estimates, and blocks before every Talking/Runway submission if
+the duration gate or owner USD cap would be exceeded. Unknown values remain JSON `null`; neither
+`--accept-unknown-provider-cost` nor a fabricated actual is needed when the staged projection is
+complete. General Goal 2 generation resolves either a valid legacy one-result motion smoke or the
+existing reviewed canonical V7 parent; V7 still requires one unique passing candidate with intact
+review, keyframe, task, and media provenance. All Goal 2 automated provider clients, downloads,
+clocks, and network behavior are fakes, while one test performs a real local FFmpeg export.
 
 ## Approved anchors
 

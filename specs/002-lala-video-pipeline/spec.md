@@ -378,7 +378,11 @@ asset is approved.
 - **FR-043**: Every live voice, talking, motion, and complete-pilot action MUST receive an explicit
   applicable provider-cost or credit ceiling before provider construction; exceedance MUST stop,
   unknown cost MUST stop unless accepted for one call explicitly, and estimates and actuals MUST
-  remain distinct with unknown values represented as null.
+  remain distinct with unknown values represented as null. A cloned-voice complete pilot MAY use
+  an explicit bounded-duration staged gate instead of accepting unknown cost: it MUST record that
+  TTS duration is not provider-enforced, project known unit rates at the workflow duration limit,
+  measure the downloaded WAV, recompute the cumulative estimate, and block all Talking and motion
+  submissions when either the duration limit or owner USD ceiling would be exceeded.
 - **FR-044**: Technical video validation MUST record container, duration, dimensions, video codec,
   pixel format, average frame rate, audio presence and codec, sample rate, channel count, and bit
   rate; validate expected duration/resolution/audio rules; and generate non-overwriting first,

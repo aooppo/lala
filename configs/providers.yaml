@@ -7,6 +7,7 @@ safety:
   max_concurrency: 1
   max_retries: 2
   provider_timeout_seconds: 1800
+  max_talking_duration_seconds: 60
   allow_live_calls: false
 providers:
   heygen:

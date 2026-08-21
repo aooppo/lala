@@ -106,6 +106,14 @@ def configure_parser(subparsers: Any) -> None:
     generate.add_argument("--motion-smoke-review-file")
     generate.add_argument("--talking-variations", type=int)
     generate.add_argument("--motion-variations", type=int)
+    generate.add_argument(
+        "--max-talking-duration-seconds",
+        type=float,
+        help=(
+            "explicit post-TTS duration gate used to project and enforce pilot cost; "
+            "HeyGen does not enforce this bound during synthesis"
+        ),
+    )
     _budgets(generate)
     _mode(generate)
 

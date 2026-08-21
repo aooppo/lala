@@ -241,3 +241,39 @@ terminal credits separately from estimates. These sources supersede assumptions 
 - Treat unknown cost as zero: rejected because estimates and final charges are distinct evidence.
 - Make motion smoke depend on narration: rejected because Runway image-to-video needs neither
   HeyGen nor speech and must be reviewable as a separate capability.
+
+## Decision 9 — Duration-dependent pilot budgeting and canonical motion prerequisites
+
+**Decision**: Treat pre-TTS HeyGen totals as duration-dependent even though the Starfish and Avatar
+IV unit rates are known. A complete cloned-voice pilot requires an explicit
+`--max-talking-duration-seconds` workflow limit, capped by repository safety configuration.
+Dry-run records the voice rate USD 0.000667/output-second, Avatar IV photo-avatar rate USD
+0.05/output-second, Runway `gen4_turbo` five credits/output-second at USD 0.01/credit, the known
+Runway amount, and a projection at the duration limit. It labels the state
+`TOTAL_EXACT_UNKNOWN_UNTIL_TTS` and explicitly records that HeyGen does not enforce the duration
+limit during synthesis. After TTS, local WAV inspection supplies the actual duration; the runner
+recalculates the cumulative estimate and blocks before Talking or Runway submission if the WAV is
+over the workflow limit or the projected total exceeds the owner ceiling.
+
+General Goal 2 live generation also reuses the existing canonical motion-prerequisite resolver.
+It accepts either the historical valid one-result motion smoke or a reviewed canonical V7 parent.
+The V7 path retains its unique-winner, human attribution, MTL readiness, review provenance,
+keyframe digest, provider task, downloaded media, and media digest checks, then resolves only the
+selected request. The general runner separately binds that request to its currently selected
+approved keyframe before any provider factory is constructed.
+
+**Rationale**: Output duration is returned only after speech synthesis, so an exact pre-TTS total
+would be fabricated. The staged gate exposes the dependency and limits the expensive downstream
+work while preserving the single TTS result as append-only evidence. Reusing the existing V7
+resolver avoids a second, weaker interpretation of the human gate and keeps legacy evidence
+readable.
+
+**Alternatives considered**:
+
+- Treat the workflow duration limit as a HeyGen-enforced upper bound: rejected because the speech
+  contract does not provide that guarantee.
+- Continue emitting only generic `null`: rejected because it hides known unit rates, the exact
+  dependency, and the actionable post-TTS enforcement stage.
+- Use a words-per-minute estimate: rejected because it is not an executable provider constraint.
+- Add a Product Page-only V7 parser: rejected because the P1-2 canonical resolver already performs
+  the required validation and supports historical one-result evidence.

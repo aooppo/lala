@@ -72,6 +72,7 @@ class VideoRunOptions:
     provider_name: str | None = None
     max_provider_cost_usd: float | None = None
     max_runway_credits: float | None = None
+    max_talking_duration_seconds: float | None = None
     accept_unknown_provider_cost: bool = False
     motion_model: str | None = None
     motion_duration: int | None = None
@@ -141,13 +142,65 @@ def preview_video(project_root: Path, options: VideoRunOptions) -> VideoRunOutco
         motion_variations=options.motion_variations,
     )
     _validate_motion_plan_prompts(config, plan)
+    smoke_review_evidence: dict[str, str] | None = None
+    motion_smoke_review_evidence: dict[str, Any] | None = None
+    if options.action == "generate" and (
+        options.smoke_run_id is not None or options.smoke_review_file is not None
+    ):
+        smoke, smoke_review_evidence = _validate_passing_smoke(
+            config.root, options.smoke_run_id, options.smoke_review_file
+        )
+        smoke_request = _first_talking_request(smoke)
+        if smoke_request.get("keyframe_sha256") != keyframe.sha256:
+            raise ExternalInputBlocked(
+                "passing smoke run used a different approved keyframe digest"
+            )
+        if smoke_request.get("provider") != preset.talking_provider:
+            raise ExternalInputBlocked(
+                "passing smoke run used a different talking provider"
+            )
+    if options.action == "generate" and (
+        options.motion_smoke_run_id is not None
+        or options.motion_smoke_review_file is not None
+    ):
+        motion_smoke_review_evidence = _resolve_generation_motion_prerequisite(
+            config.root,
+            options.motion_smoke_run_id,
+            options.motion_smoke_review_file,
+            keyframe_sha256=keyframe.sha256,
+        )
+    talking_duration_limit = _talking_duration_limit(
+        config, options, required=False
+    )
     cost = estimate_plan_cost(
         plan,
         config,
         talking_duration_seconds=audio.duration_seconds if audio is not None else None,
+        talking_duration_limit_seconds=talking_duration_limit,
     )
     preview_budgets = _budget_limits(options)
     estimated_provider_cost = cost.get("total_provider_cost")
+    projected_provider_cost = cost.get("projected_total_at_duration_limit")
+    if options.action == "generate" and options.max_provider_cost_usd is not None:
+        check_estimate(
+            preview_budgets,
+            provider=preset.talking_provider,
+            estimated_usd=(
+                float(projected_provider_cost)
+                if projected_provider_cost is not None
+                else None
+            ),
+            operation="pilot dry-run duration projection",
+        )
+    estimated_motion_credits = _estimate_motion_credits(config, plan)
+    if options.action == "generate" and options.max_runway_credits is not None:
+        check_estimate(
+            preview_budgets,
+            provider="runway",
+            estimated_usd=cost.get("motion_video_cost"),
+            estimated_credits=estimated_motion_credits,
+            operation="pilot dry-run Runway projection",
+        )
     if options.action == "talking_smoke":
         smoke_duration = audio.duration_seconds if audio is not None else 12.0
         talking_results = sum(
@@ -201,8 +254,13 @@ def preview_video(project_root: Path, options: VideoRunOptions) -> VideoRunOutco
             "budget": _budget_evidence(
                 preview_budgets,
                 estimated_provider_cost,
-                _estimate_motion_credits(config, plan),
+                estimated_motion_credits,
+                cost=cost,
             ),
+            "smoke_run_id": options.smoke_run_id,
+            "smoke_review": smoke_review_evidence,
+            "motion_smoke_run_id": options.motion_smoke_run_id,
+            "motion_smoke_review": motion_smoke_review_evidence,
             "requests": requests,
         },
     )
@@ -214,8 +272,13 @@ def preview_video(project_root: Path, options: VideoRunOptions) -> VideoRunOutco
             "budget": _budget_evidence(
                 preview_budgets,
                 estimated_provider_cost,
-                _estimate_motion_credits(config, plan),
+                estimated_motion_credits,
+                cost=cost,
             ),
+            "smoke_run_id": options.smoke_run_id,
+            "smoke_review": smoke_review_evidence,
+            "motion_smoke_run_id": options.motion_smoke_run_id,
+            "motion_smoke_review": motion_smoke_review_evidence,
         },
     )
     storage.write_bytes_new(run, "script.txt", script.content)
@@ -738,16 +801,75 @@ def _budget_limits(options: VideoRunOptions) -> BudgetLimits:
     )
 
 
+def _talking_duration_limit(
+    config: VideoProjectConfig,
+    options: VideoRunOptions,
+    *,
+    required: bool,
+) -> float | None:
+    value = options.max_talking_duration_seconds
+    if value is None:
+        if required:
+            raise ExternalInputBlocked(
+                "cloned-voice pilot requires explicit --max-talking-duration-seconds"
+            )
+        return None
+    value = float(value)
+    if not math.isfinite(value) or value <= 0:
+        raise ExternalInputBlocked(
+            "max talking duration seconds must be finite and positive"
+        )
+    if value > config.limits.max_talking_duration_seconds:
+        raise ExternalInputBlocked(
+            f"max talking duration seconds {value:g} exceeds the configured "
+            f"{config.limits.max_talking_duration_seconds:g}-second safety limit"
+        )
+    return value
+
+
 def _budget_evidence(
-    limits: BudgetLimits, estimated_usd: float | None, estimated_credits: float | None
+    limits: BudgetLimits,
+    estimated_usd: float | None,
+    estimated_credits: float | None,
+    *,
+    cost: Mapping[str, Any] | None = None,
+    actual_duration_seconds: float | None = None,
 ) -> dict[str, Any]:
-    return {
+    evidence = {
         "max_provider_cost_usd": limits.max_provider_cost_usd,
         "max_runway_credits": limits.max_runway_credits,
         "accept_unknown_provider_cost": limits.accept_unknown_provider_cost,
         "estimated_provider_cost_usd": estimated_usd,
         "estimated_runway_credits": estimated_credits,
     }
+    if cost is not None:
+        projected = cost.get("projected_total_at_duration_limit")
+        actual_estimate = cost.get("total_provider_cost")
+        evidence.update(
+            {
+                "budget_state": cost.get("budget_state"),
+                "known_provider_cost_usd": cost.get("known_provider_cost"),
+                "projected_total_at_duration_limit_usd": projected,
+                "post_tts_total_estimate_usd": (
+                    actual_estimate if actual_duration_seconds is not None else None
+                ),
+                "talking_duration_limit_seconds": cost.get(
+                    "talking_duration_limit_seconds"
+                ),
+                "post_tts_actual_duration_seconds": actual_duration_seconds,
+                "tts_duration_provider_enforced": cost.get(
+                    "tts_duration_provider_enforced"
+                ),
+                "duration_gate_stage": cost.get("duration_gate_stage"),
+                "remaining_provider_budget_usd": (
+                    round(float(limits.max_provider_cost_usd) - float(actual_estimate), 6)
+                    if limits.max_provider_cost_usd is not None
+                    and actual_estimate is not None
+                    else None
+                ),
+            }
+        )
+    return evidence
 
 
 def _estimate_talking_stage_usd(
@@ -2882,6 +3004,38 @@ def _first_motion_request(request_evidence: Mapping[str, Any]) -> dict[str, Any]
     raise ExternalInputBlocked("motion smoke request provenance is missing")
 
 
+def _resolve_generation_motion_prerequisite(
+    project_root: Path,
+    run_id: str | None,
+    review_file: Path | None,
+    *,
+    keyframe_sha256: str,
+) -> dict[str, Any]:
+    """Resolve one legacy or canonical V7 prerequisite without weakening either gate."""
+
+    parent, evidence = _validate_passing_motion_variation_smoke(
+        project_root, run_id, review_file
+    )
+    requests = [
+        item
+        for item in parent.get("requests") or []
+        if isinstance(item, Mapping)
+        and (item.get("image_sha256") or item.get("keyframe_sha256"))
+    ]
+    if len(requests) != 1:
+        raise ExternalInputBlocked(
+            "motion prerequisite must resolve to exactly one canonical request"
+        )
+    prerequisite_keyframe = requests[0].get("image_sha256") or requests[0].get(
+        "keyframe_sha256"
+    )
+    if prerequisite_keyframe != keyframe_sha256:
+        raise ExternalInputBlocked(
+            "motion prerequisite used a different approved keyframe digest"
+        )
+    return evidence
+
+
 def generate_video(
     project_root: Path,
     options: VideoRunOptions,
@@ -2914,9 +3068,9 @@ def generate_video(
         raise ExternalInputBlocked("passing smoke run used a different approved keyframe digest")
     if smoke_request.get("provider") != preset.talking_provider:
         raise ExternalInputBlocked("passing smoke run used a different talking provider")
-    motion_smoke_review_evidence: dict[str, str] | None = None
+    motion_smoke_review_evidence: dict[str, Any] | None = None
     if providers is None:
-        motion_smoke_review_evidence = _validate_passing_motion_smoke(
+        motion_smoke_review_evidence = _resolve_generation_motion_prerequisite(
             config.root,
             options.motion_smoke_run_id,
             options.motion_smoke_review_file,
@@ -2939,12 +3093,28 @@ def generate_video(
     talking_requests = sum(
         len(shot.requests) for shot in plan.shots if shot.kind == "talking"
     )
-    estimated_talking_usd = _estimate_talking_stage_usd(
+    talking_duration_limit = _talking_duration_limit(
         config,
-        provider_name=preset.talking_provider,
-        talking_results=talking_requests,
-        duration_seconds=12.0,
-        include_voice=bool(plan.voice_request_count),
+        options,
+        required=providers is None and bool(plan.voice_request_count),
+    )
+    preflight_audio = (
+        resolve_approved_audio(config, script)
+        if not plan.voice_request_count
+        else None
+    )
+    preflight_cost = estimate_plan_cost(
+        plan,
+        config,
+        talking_duration_seconds=(
+            preflight_audio.duration_seconds if preflight_audio is not None else None
+        ),
+        talking_duration_limit_seconds=talking_duration_limit,
+    )
+    preflight_total_usd = (
+        preflight_cost.get("total_provider_cost")
+        if preflight_cost.get("total_provider_cost") is not None
+        else preflight_cost.get("projected_total_at_duration_limit")
     )
     if providers is None:
         if environment.get("VIDEO_FULL_PILOT_LIVE") != "true":
@@ -2955,7 +3125,11 @@ def generate_video(
             check_estimate(
                 budget_limits,
                 provider=preset.talking_provider,
-                estimated_usd=estimated_talking_usd,
+                estimated_usd=(
+                    float(preflight_total_usd)
+                    if preflight_total_usd is not None
+                    else None
+                ),
                 operation="pilot provider construction",
             )
         if estimated_motion_credits is not None:
@@ -2988,17 +3162,43 @@ def generate_video(
     )
     voice_call_count = plan.voice_request_count
     audio: ApprovedAudio | None = None
+    post_tts_cost: dict[str, Any] | None = None
     try:
         if providers is None and plan.voice_request_count:
             check_estimate(
                 budget_limits,
                 provider=preset.talking_provider,
-                estimated_usd=estimated_talking_usd,
+                estimated_usd=(
+                    float(preflight_total_usd)
+                    if preflight_total_usd is not None
+                    else None
+                ),
                 operation="HeyGen speech submission",
             )
         audio = resolve_or_synthesize_audio(
             config, script, run_id=run.run_id, provider=voice_provider
         )
+        post_tts_cost = estimate_plan_cost(
+            plan,
+            config,
+            talking_duration_seconds=audio.duration_seconds,
+            talking_duration_limit_seconds=talking_duration_limit,
+        )
+        if (
+            talking_duration_limit is not None
+            and audio.duration_seconds > talking_duration_limit
+        ):
+            raise ExternalInputBlocked(
+                f"post-TTS audio duration {audio.duration_seconds:.6f}s exceeds the "
+                f"{talking_duration_limit:g}s workflow limit; Talking and Runway remain unsubmitted"
+            )
+        if providers is None:
+            check_estimate(
+                budget_limits,
+                provider=preset.talking_provider,
+                estimated_usd=post_tts_cost.get("total_provider_cost"),
+                operation="post-TTS cumulative pilot projection",
+            )
     except Exception as exc:
         failure_requests = (
             [_planned_voice_evidence(config, script, run.run_id)]
@@ -3015,12 +3215,29 @@ def generate_video(
             run,
             exc,
             stage="voice_resolution",
-            audio=None,
+            audio=audio,
             requests=failure_requests,
             known_submissions=voice_call_count,
             context={
                 "smoke_run_id": options.smoke_run_id,
                 "smoke_review": smoke_review_evidence,
+                "preflight_budget": _budget_evidence(
+                    budget_limits,
+                    None,
+                    estimated_motion_credits,
+                    cost=preflight_cost,
+                ),
+                "post_tts_budget": (
+                    _budget_evidence(
+                        budget_limits,
+                        post_tts_cost.get("total_provider_cost"),
+                        estimated_motion_credits,
+                        cost=post_tts_cost,
+                        actual_duration_seconds=audio.duration_seconds,
+                    )
+                    if post_tts_cost is not None and audio is not None
+                    else None
+                ),
             },
         )
         raise
@@ -3046,7 +3263,11 @@ def generate_video(
             "provider_call_count": plan.provider_call_count,
             "concurrency": 1,
             "budget": _budget_evidence(
-                budget_limits, estimated_talking_usd, estimated_motion_credits
+                budget_limits,
+                post_tts_cost.get("total_provider_cost"),
+                estimated_motion_credits,
+                cost=post_tts_cost,
+                actual_duration_seconds=audio.duration_seconds,
             ),
         },
     )
@@ -3090,7 +3311,9 @@ def generate_video(
                         check_estimate(
                             budget_limits,
                             provider=preset.talking_provider,
-                            estimated_usd=estimated_talking_usd,
+                            estimated_usd=post_tts_cost.get(
+                                "total_provider_cost"
+                            ),
                             operation="HeyGen video submission",
                         )
                 provider = selected_providers.get(request.provider)
@@ -3133,7 +3356,12 @@ def generate_video(
         status = "PARTIAL"
     else:
         status = "FAILED"
-    cost = estimate_plan_cost(plan, config, talking_duration_seconds=audio.duration_seconds)
+    cost = estimate_plan_cost(
+        plan,
+        config,
+        talking_duration_seconds=audio.duration_seconds,
+        talking_duration_limit_seconds=talking_duration_limit,
+    )
     _apply_execution_cost_facts(cost, executions, request_responsibilities)
     if voice_call_count:
         for component in cost.get("components", []):
@@ -3196,7 +3424,11 @@ def generate_video(
             "motion_smoke_review": motion_smoke_review_evidence,
             "provider_call_count": plan.provider_call_count,
             "budget": _budget_evidence(
-                budget_limits, estimated_talking_usd, estimated_motion_credits
+                budget_limits,
+                cost.get("total_provider_cost"),
+                estimated_motion_credits,
+                cost=cost,
+                actual_duration_seconds=audio.duration_seconds,
             ),
             "requests": request_evidence,
         },
@@ -3210,7 +3442,11 @@ def generate_video(
             "smoke_run_id": options.smoke_run_id,
             "smoke_review": smoke_review_evidence,
             "budget": _budget_evidence(
-                budget_limits, estimated_talking_usd, estimated_motion_credits
+                budget_limits,
+                cost.get("total_provider_cost"),
+                estimated_motion_credits,
+                cost=cost,
+                actual_duration_seconds=audio.duration_seconds,
             ),
         },
     )
@@ -3475,6 +3711,9 @@ def handle_video_command(args: Any) -> tuple[int, Any]:
             provider_name=getattr(args, "provider", None),
             max_provider_cost_usd=getattr(args, "max_provider_cost_usd", None),
             max_runway_credits=getattr(args, "max_runway_credits", None),
+            max_talking_duration_seconds=getattr(
+                args, "max_talking_duration_seconds", None
+            ),
             accept_unknown_provider_cost=bool(
                 getattr(args, "accept_unknown_provider_cost", False)
             ),
@@ -3706,6 +3945,7 @@ def _resolved_config(
         "limits": to_primitive(config.limits),
         "providers_verified_on": config.verified_on,
         "provider_call_count": plan.provider_call_count,
+        "max_talking_duration_seconds": options.max_talking_duration_seconds,
         "live": False,
     }
 

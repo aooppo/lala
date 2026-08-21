@@ -425,10 +425,15 @@ def _parse_providers(
         max_concurrency=_bounded_int(raw_safety.get("max_concurrency"), "max concurrency", 1, 1),
         max_retries=_bounded_int(raw_safety.get("max_retries"), "max retries", 0, 2),
         provider_timeout_seconds=float(raw_safety.get("provider_timeout_seconds") or 0),
+        max_talking_duration_seconds=float(
+            raw_safety.get("max_talking_duration_seconds") or 0
+        ),
         allow_live_calls=raw_safety.get("allow_live_calls") is True,
     )
     if not 0 < limits.provider_timeout_seconds <= 1800:
         raise VideoConfigError("provider_timeout_seconds must be within 1..1800")
+    if not 0 < limits.max_talking_duration_seconds <= 60:
+        raise VideoConfigError("max_talking_duration_seconds must be within 1..60")
     raw_providers = data.get("providers")
     if not isinstance(raw_providers, Mapping):
         raise VideoConfigError("providers must be a mapping")

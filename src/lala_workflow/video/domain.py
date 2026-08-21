@@ -101,6 +101,7 @@ class SafetyLimits:
     max_concurrency: int
     max_retries: int
     provider_timeout_seconds: float
+    max_talking_duration_seconds: float
     allow_live_calls: bool
 
 

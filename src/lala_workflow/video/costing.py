@@ -11,11 +11,22 @@ def estimate_plan_cost(
     config: VideoProjectConfig,
     *,
     talking_duration_seconds: float | None,
+    talking_duration_limit_seconds: float | None = None,
 ) -> dict[str, Any]:
+    """Estimate provider cost without treating a future TTS duration as known.
+
+    ``talking_duration_limit_seconds`` is a workflow continuation gate, not a
+    provider-enforced TTS limit.  It supports an auditable projection for dry-run and
+    provider construction; exact duration-based estimates are emitted only after a WAV
+    duration is available in ``talking_duration_seconds``.
+    """
+
     buckets: dict[tuple[str, str, str], dict[str, Any]] = defaultdict(
         lambda: {
             "seconds": 0.0,
+            "duration_limit_seconds": 0.0,
             "duration_known": True,
+            "duration_basis": "planned_request_duration",
             "outputs": 0,
             "price": None,
             "source": None,
@@ -27,21 +38,36 @@ def estimate_plan_cost(
         profile = config.voice_profile
         key = ("voice", str(profile.provider or "unknown"), str(profile.model or "unknown"))
         bucket = buckets[key]
-        bucket["duration_known"] = False
         bucket["outputs"] = 1
+        if talking_duration_seconds is not None:
+            bucket["seconds"] = float(talking_duration_seconds)
+            bucket["duration_basis"] = "actual_audio_duration"
+        else:
+            bucket["duration_known"] = False
+            bucket["duration_basis"] = "tts_output_duration"
+            if talking_duration_limit_seconds is not None:
+                bucket["duration_limit_seconds"] = float(
+                    talking_duration_limit_seconds
+                )
         price, source, date = _unit_price(
             config, str(profile.provider or "unknown"), str(profile.model or "unknown")
         )
         bucket["price"] = price
         bucket["source"] = source
         bucket["date"] = date
-        unknown = True
+        if price is None or not bucket["duration_known"]:
+            unknown = True
     for shot in plan.shots:
         for request in shot.requests:
             key = (request.responsibility, request.provider, request.model)
             bucket = buckets[key]
             if request.responsibility == "talking" and talking_duration_seconds is None:
                 bucket["duration_known"] = False
+                bucket["duration_basis"] = "tts_output_duration"
+                if talking_duration_limit_seconds is not None:
+                    bucket["duration_limit_seconds"] += float(
+                        talking_duration_limit_seconds
+                    )
                 seconds = 0.0
             else:
                 seconds = (
@@ -50,6 +76,8 @@ def estimate_plan_cost(
                     else float(request.duration_seconds or 0)
                 )
                 bucket["seconds"] += seconds
+                if request.responsibility == "talking":
+                    bucket["duration_basis"] = "actual_audio_duration"
             bucket["outputs"] += 1
             price, source, date = _unit_price(config, request.provider, request.model)
             bucket["price"] = price
@@ -64,12 +92,27 @@ def estimate_plan_cost(
         "talking": None,
         "motion": None,
     }
+    category_duration_limit_projections: dict[str, float | None] = {
+        "voice": None,
+        "talking": None,
+        "motion": None,
+    }
+    known_provider_cost = 0.0
+    projected_total = 0.0
+    projection_complete = True
     for (category, provider, model), bucket in sorted(buckets.items()):
         price = bucket["price"]
         amount = (
             round(float(bucket["seconds"]) * float(price), 6)
             if price is not None and bucket["duration_known"]
             else None
+        )
+        duration_limit_projection = (
+            round(float(bucket["duration_limit_seconds"]) * float(price), 6)
+            if amount is None
+            and price is not None
+            and float(bucket["duration_limit_seconds"]) > 0
+            else amount
         )
         if amount is None:
             components.append(
@@ -86,12 +129,34 @@ def estimate_plan_cost(
                     "successful_outputs": 0,
                     "failed_outputs": 0,
                     "amount": None,
-                    "basis": "estimated",
+                    "duration_limit_projection_amount": duration_limit_projection,
+                    "basis": (
+                        "workflow_duration_projection"
+                        if duration_limit_projection is not None
+                        else "duration_dependent"
+                    ),
+                    "duration_basis": bucket["duration_basis"],
+                    "duration_dependency": "tts_output_duration",
+                    "duration_limit_seconds": (
+                        round(float(bucket["duration_limit_seconds"]), 6)
+                        if float(bucket["duration_limit_seconds"]) > 0
+                        else None
+                    ),
+                    "unit_rate_usd_per_output_second": price,
                     "currency": config.currency,
                     "pricing_source": bucket["source"],
                     "pricing_date": bucket["date"],
                 }
             )
+            if duration_limit_projection is None:
+                projection_complete = False
+            else:
+                category_duration_limit_projections[category] = round(
+                    (category_duration_limit_projections[category] or 0)
+                    + duration_limit_projection,
+                    6,
+                )
+                projected_total += duration_limit_projection
             continue
         component = CostComponent(
             category=category,
@@ -118,12 +183,22 @@ def estimate_plan_cost(
                 "failed_outputs": component.failed_outputs,
                 "amount": component.amount,
                 "basis": component.basis,
+                "duration_limit_projection_amount": component.amount,
+                "duration_basis": bucket["duration_basis"],
+                "duration_dependency": None,
+                "duration_limit_seconds": component.generated_seconds,
+                "unit_rate_usd_per_output_second": price,
                 "currency": component.currency,
                 "pricing_source": component.pricing_source,
                 "pricing_date": component.pricing_date,
             }
         )
         category_totals[category] = round((category_totals[category] or 0) + amount, 6)
+        category_duration_limit_projections[category] = round(
+            (category_duration_limit_projections[category] or 0) + amount, 6
+        )
+        known_provider_cost += amount
+        projected_total += amount
     total = (
         None
         if unknown
@@ -133,9 +208,40 @@ def estimate_plan_cost(
         "voice_cost": category_totals["voice"],
         "talking_video_cost": category_totals["talking"],
         "motion_video_cost": category_totals["motion"],
+        "voice_cost_at_duration_limit": category_duration_limit_projections["voice"],
+        "talking_video_cost_at_duration_limit": category_duration_limit_projections[
+            "talking"
+        ],
+        "motion_video_cost_at_duration_limit": category_duration_limit_projections[
+            "motion"
+        ],
         "editing_cost": 0,
         "storage_cost": None,
         "total_provider_cost": total,
+        "known_provider_cost": round(known_provider_cost, 6),
+        "projected_total_at_duration_limit": (
+            round(projected_total, 6) if projection_complete else None
+        ),
+        "budget_state": (
+            "TOTAL_ESTIMATE_KNOWN"
+            if total is not None
+            else (
+                "TOTAL_EXACT_UNKNOWN_UNTIL_TTS"
+                if projection_complete
+                and talking_duration_limit_seconds is not None
+                else "TALKING_DURATION_REQUIRED"
+            )
+        ),
+        "talking_duration_seconds": talking_duration_seconds,
+        "talking_duration_limit_seconds": talking_duration_limit_seconds,
+        "tts_duration_provider_enforced": (
+            False if plan.voice_request_count and talking_duration_seconds is None else None
+        ),
+        "duration_gate_stage": (
+            "post_tts_before_talking_or_motion_submission"
+            if plan.voice_request_count
+            else None
+        ),
         "currency": config.currency,
         "components": components,
     }

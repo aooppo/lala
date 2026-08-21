@@ -942,3 +942,34 @@
   **266 passed in 43.88s**.
 - Real provider accounting for this fix: Runway **0**, HeyGen **0**, other providers **0**, paid
   calls **0**. No approved-source or generated-media file was changed.
+
+## Goal 2 Product Page pilot preflight remediation
+
+- Corrected the external Talking Smoke reviewed copy reviewer placeholder to the stable existing
+  human identifier `Project owner (explicit human decision)` without changing the Owner PASS,
+  timezone-aware `reviewed_at`, or immutable run-local blank review. The reviewed-copy SHA-256 is
+  `06f1dc9e23c46299ab0ebf17988e4549284352c0dba0a1c78d52d77da7452d84`; the original run review
+  remains `8e57c24fc38855fd481975193a004e83f83c4c40aa1d1d2f091b520bdd89bfcb`.
+- Added the explicit post-TTS `--max-talking-duration-seconds` workflow gate with a configured
+  60-second safety ceiling. Dry-run now preserves exact unknown HeyGen totals, records known unit
+  rates and `TOTAL_EXACT_UNKNOWN_UNTIL_TTS`, and distinguishes a duration-limit projection from an
+  actual-duration estimate. Live code requires the explicit gate for cloned voice, measures the
+  WAV after the one TTS result, recalculates cumulative cost and remaining budget, and blocks all
+  Talking/Runway submissions if either the duration or Owner USD cap is exceeded. The evidence
+  states that HeyGen does not provider-enforce the TTS duration limit.
+- General Goal 2 preview/live generation now shares the existing canonical motion-prerequisite
+  resolver: legacy one-result motion smoke remains compatible, while a V7 parent requires one
+  unique human-reviewed/MTL-ready winner plus intact review, task, keyframe, media, and hash
+  provenance. The selected request is rebound to the current approved keyframe before provider
+  construction. The canonical V7 run still uniquely resolves `v7-a-stability-first`.
+- New Product Page dry-run `LALA-VIDEO-20260821-014037-PRODUCT-PAGE-001` retained thirteen
+  artifacts and zero submissions. It records one Starfish request, one Avatar IV request, two
+  four-second `gen4_turbo` requests, 40 Runway credits / USD 0.40, a 45-second voice projection of
+  USD 0.030015, Talking projection of USD 2.25, combined projection USD 2.680015, exact total
+  unknown until TTS, and `accept_unknown_provider_cost=false`. Talking and V7 review hashes are
+  embedded in request/resolved evidence.
+- Verification: focused preflight tests **10 passed**; broader focused video tests **54 passed**;
+  complete offline suite **288 passed in 49.86s**; compileall, Goal 2 validation, and
+  `git diff --check` passed. Approved-source and historical V7 evidence hashes remain unchanged.
+  Provider accounting for this remediation: Runway HTTP **0**, HeyGen HTTP **0**, provider
+  submissions **0**, paid calls **0**. No Product Page Live was executed.

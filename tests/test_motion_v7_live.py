@@ -11,7 +11,8 @@ import lala_workflow.video.runner as runner_module
 from lala_workflow.cli import build_parser
 from lala_workflow.providers.base import ProviderSubmissionError
 from lala_workflow.video.motion_v7 import V7_CANDIDATE_IDS
-from lala_workflow.video.runner import run_motion_v7_live
+from lala_workflow.video.runner import recover_motion_v7_live, run_motion_v7_live
+from lala_workflow.hashing import sha256_file
 from lala_workflow.video.storage import QA_FIELDS, VIDEO_RUN_FILES
 from lala_workflow.video.validation import ExternalInputBlocked
 from tests.fakes_video import FakeMotionProvider
@@ -80,6 +81,16 @@ class FailNthSubmissionProvider(EvidenceCheckingMotionProvider):
         return super().submit(request)
 
 
+class CreditFailSecondSubmissionProvider(EvidenceCheckingMotionProvider):
+    def submit(self, request) -> str:
+        if len(self.submitted) == 1:
+            self.plan_verified_before_submit.append(True)
+            self.submitted.append(request)
+            self.http_request_count += 1
+            raise ProviderSubmissionError("synthetic insufficient credits")
+        return super().submit(request)
+
+
 def _run(root: Path, provider, **overrides):
     values = {
         "keyframe_id": "hero",
@@ -95,6 +106,28 @@ def _run(root: Path, provider, **overrides):
 
 def _submission_count(provider) -> int:
     return len(provider.submitted)
+
+
+def _recover(root: Path, parent_run_id: str, provider, **overrides):
+    values = {
+        "parent_run_id": parent_run_id,
+        "execute_live": True,
+        "confirm_missing_bc": True,
+        "max_runway_credits": 50,
+        "provider": provider,
+        "environ": LIVE_ENV,
+    }
+    values.update(overrides)
+    return recover_motion_v7_live(root, **values)
+
+
+def _candidate16_fixture_constants(root: Path, monkeypatch) -> None:
+    monkeypatch.setattr(runner_module, "CANDIDATE16_V7_KEYFRAME_ID", "hero")
+    monkeypatch.setattr(
+        runner_module,
+        "CANDIDATE16_V7_KEYFRAME_SHA256",
+        sha256_file(root / "assets/approved_keyframes/hero.png"),
+    )
 
 
 def test_v7_live_cli_is_fixed_and_requires_runtime_confirmations() -> None:
@@ -326,3 +359,85 @@ def test_v7_live_fail_stop_covers_a_and_c_submission_errors(
     assert [item["submission_state"] for item in results["results"]] == expected_states
     assert results["automatic_retries"] == 0
     assert results["replacement_tasks"] == 0
+
+
+def test_v7_recovery_submits_only_b_c_and_stages_blank_owner_review(
+    video_project_root: Path, synthetic_video: Path, monkeypatch
+) -> None:
+    _candidate16_fixture_constants(video_project_root, monkeypatch)
+    parent_provider = CreditFailSecondSubmissionProvider(video_project_root, synthetic_video)
+    parent = _run(video_project_root, parent_provider)
+    provider = FakeMotionProvider(synthetic_video)
+
+    outcome = _recover(video_project_root, parent.run_id, provider)
+
+    assert outcome.status == "SUCCEEDED"
+    assert outcome.provider_call_count == 2
+    assert outcome.submission_count == 2
+    assert [request.shot_id for request in provider.submitted] == list(V7_CANDIDATE_IDS[1:])
+    assert all(request.max_retries == 0 for request in provider.submitted)
+    results = json.loads(
+        (outcome.run_dir / "provider-results.json").read_text(encoding="utf-8")
+    )
+    assert [item["candidate_id"] for item in results["results"]] == list(V7_CANDIDATE_IDS)
+    assert results["results"][0]["evidence_source_run_id"] == parent.run_id
+    assert results["automatic_retries"] == 0
+    assert results["replacement_tasks"] == 0
+    assert results["combined_confirmed_actual_runway_credits"] is None
+    package = video_project_root / "outputs/reviews/candidate16-v7"
+    manifest = json.loads((package / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["state"] == "READY_FOR_OWNER_CANDIDATE16_V7_REVIEW"
+    assert manifest["winner"] is None
+    assert manifest["coffee_table_executed"] is False
+    assert len(manifest["media"]) == 3
+    comparison = video_project_root / manifest["comparison"]["path"]
+    assert comparison.is_file()
+    assert manifest["comparison"]["sha256"] == sha256_file(comparison)
+    assert manifest["comparison"]["layout"] == "left=A, center=B, right=C"
+    with (package / "review.csv").open(newline="", encoding="utf-8") as source:
+        rows = list(csv.DictReader(source))
+    assert len(rows) == 3
+    assert all(all(row[field] == "" for field in QA_FIELDS[4:]) for row in rows)
+
+
+def test_v7_recovery_exact_cap_and_duplicate_evidence_block_before_submission(
+    video_project_root: Path, synthetic_video: Path, monkeypatch
+) -> None:
+    _candidate16_fixture_constants(video_project_root, monkeypatch)
+    parent = _run(
+        video_project_root,
+        CreditFailSecondSubmissionProvider(video_project_root, synthetic_video),
+    )
+    blocked_provider = FakeMotionProvider(synthetic_video)
+    with pytest.raises(ExternalInputBlocked, match="exact.*50"):
+        _recover(
+            video_project_root,
+            parent.run_id,
+            blocked_provider,
+            max_runway_credits=75,
+        )
+    assert blocked_provider.submitted == []
+
+    first_provider = FakeMotionProvider(synthetic_video)
+    _recover(video_project_root, parent.run_id, first_provider)
+    duplicate_provider = FakeMotionProvider(synthetic_video)
+    with pytest.raises(ExternalInputBlocked, match="already exists"):
+        _recover(video_project_root, parent.run_id, duplicate_provider)
+    assert duplicate_provider.submitted == []
+
+
+def test_v7_recovery_parent_a_hash_tamper_blocks_all_submissions(
+    video_project_root: Path, synthetic_video: Path, monkeypatch
+) -> None:
+    _candidate16_fixture_constants(video_project_root, monkeypatch)
+    parent = _run(
+        video_project_root,
+        CreditFailSecondSubmissionProvider(video_project_root, synthetic_video),
+    )
+    results = json.loads((parent.run_dir / "provider-results.json").read_text(encoding="utf-8"))
+    a_path = video_project_root / results["results"][0]["artifacts"][0]["path"]
+    a_path.write_bytes(b"tampered")
+    provider = FakeMotionProvider(synthetic_video)
+    with pytest.raises(ExternalInputBlocked, match="hash-mismatched"):
+        _recover(video_project_root, parent.run_id, provider)
+    assert provider.submitted == []

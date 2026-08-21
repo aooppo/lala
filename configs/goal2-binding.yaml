@@ -1,0 +1,58 @@
+schema_version: candidate16-goal2-binding/v1
+revision: 1
+active_character:
+  character_id: character-20260821-001
+  display_name: Candidate 16
+  profile: configs/characters/profiles/character-20260821-001-v006.yaml
+  profile_sha256: 659378036a36b44f69b2e5bb4312d1a62446da36b30f52eaf67e1337cfaa434b
+  registry_revision: 5
+  status: ACTIVE
+published_registry_revision: 1
+set_id: candidate16-keyframe-set-v1
+set_manifest: outputs/keyframe-sets/candidate16-keyframe-set-v1/manifest.json
+set_manifest_sha256: 12768c83fb3edb5c5c30f9f9c528a2829708c4fdcc8d64331d9b3ff6901454ef
+members:
+  K1:
+    approved_path: assets/approved_keyframes/K1-V2-002.png
+    approved_roles:
+    - pilot_home_context
+    - establishing_keyframe
+    candidate_id: K1-V2-002
+    formal_role: pilot_home_context
+    promotion_record: assets/approved_keyframes/K1-V2-002.promotion.json
+    promotion_record_sha256: d3229360f03f68c8ed20ec364015e692d25a7df14608b59318b0d69b75e22dda
+    review_sha256: e083676c75933f550fb81bbad5b897265847e46cd4406e674961ee4b44cf873d
+    sha256: 3ad624df44cc31f56309a45ae4ba9577d526693a7332ee97fb7fd9f914a7043c
+  K2:
+    approved_path: assets/approved_keyframes/K2-002.png
+    approved_roles:
+    - talking_medium_closeup
+    candidate_id: K2-002
+    formal_role: pilot_talking_medium_closeup
+    promotion_record: assets/approved_keyframes/K2-002.promotion.json
+    promotion_record_sha256: 7e30c44c9a2df3f2fe84c728230c5b5ea137ca67b61660c6f9eddb563c093e3a
+    review_sha256: e083676c75933f550fb81bbad5b897265847e46cd4406e674961ee4b44cf873d
+    sha256: 78478b171552472227772f5efc092380b69da6b698cc13182880967e3a26bd59
+  K3:
+    approved_path: assets/approved_keyframes/K3-V2-002.png
+    approved_roles:
+    - pilot_product_present
+    candidate_id: K3-V2-002
+    formal_role: pilot_product_present
+    promotion_record: assets/approved_keyframes/K3-V2-002.promotion.json
+    promotion_record_sha256: 69637dbe4cade218b08c11aebfb0a473454d08470fbc233b9ba277deceda9530
+    review_sha256: e083676c75933f550fb81bbad5b897265847e46cd4406e674961ee4b44cf873d
+    sha256: 7281237344ddfc81b7f4635a83410d87b109688b03be4188f648f20dff6fd631
+v7:
+  status: LEGACY_CHARACTER_BOUND_MISMATCH
+  methodology_reusable: true
+  character_bound_evidence_reusable: false
+  source_run_id: LALA-VIDEO-20260820-075843-MOTION-V7-001
+  source_request: runs/LALA-VIDEO-20260820-075843-MOTION-V7-001/request.json
+  source_keyframe_sha256: ab53d9d0551bcf926a41072567493cf640815d99ff92503d9bc111ec3ce7b9ca
+  candidate16_k1_sha256: 3ad624df44cc31f56309a45ae4ba9577d526693a7332ee97fb7fd9f914a7043c
+  tasks: 3
+  generated_seconds: 15
+  estimated_runway_credits: 75
+  paid_calls_authorized: false
+bound_at: '2026-08-21T06:27:19.377029+00:00'

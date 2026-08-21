@@ -112,6 +112,13 @@ class ReferenceImage:
     tag: str
     sha256: str
     mime_type: str
+    slot: int | None = None
+    semantic_role: str | None = None
+    source_type: str | None = None
+    width: int | None = None
+    height: int | None = None
+    source_url: str | None = None
+    sku: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -20,6 +20,17 @@ def utf16_code_units(text: str) -> int:
     return len(text.encode("utf-16-le")) // 2
 
 
+def normalize_runway_prompt_text(text: str) -> str:
+    """Return the exact prompt string sent to Runway.
+
+    Prompt files are UTF-8 evidence, so their trailing newline is preserved.
+    Blank detection may use ``strip()``, but payload construction and UTF-16
+    accounting must both use this unchanged string.
+    """
+
+    return text
+
+
 def load_video_prompt(project_root: Path, relative_path: Path) -> ResolvedPrompt:
     if relative_path.is_absolute() or not relative_path.as_posix():
         raise VideoPromptError("video prompt path must be project-relative")

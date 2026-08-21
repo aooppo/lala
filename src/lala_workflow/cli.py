@@ -49,6 +49,10 @@ def build_parser() -> argparse.ArgumentParser:
     generate.add_argument("--dry-run", action="store_true")
     generate.add_argument("--live", action="store_true")
     generate.add_argument("--character")
+    generate.add_argument("--scene-reference", type=Path)
+    generate.add_argument("--product-reference", type=Path)
+    generate.add_argument("--reference-source-url")
+    generate.add_argument("--reference-sku")
 
     report = subparsers.add_parser("report", help="show an existing run summary")
     report.add_argument("--project-root", type=Path, default=Path.cwd())
@@ -86,6 +90,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     character_motion_recover.add_argument("character_id")
     character_motion_recover.add_argument("--live", action="store_true")
+    character_motion_recover.add_argument("--owner-risk-override", action="store_true")
     character_motion_recover.add_argument("--max-runway-credits", type=float, required=True)
     character_motion_recover.add_argument("--project-root", type=Path, default=Path.cwd())
     character_activate = character_commands.add_parser("activate", help="approve and activate")
@@ -134,8 +139,24 @@ def main(argv: Sequence[str] | None = None) -> int:
                     max_estimated_credits=args.max_estimated_credits,
                     live=bool(args.live),
                     character_id=args.character,
+                    scene_reference=args.scene_reference,
+                    product_reference=args.product_reference,
+                    reference_source_url=args.reference_source_url,
+                    reference_sku=args.reference_sku,
                 ),
             )
+            reference_plan = []
+            if outcome.result.requests:
+                reference_plan = [
+                    {
+                        "slot": item.get("slot"),
+                        "semantic_role": item.get("semantic_role"),
+                        "path": item.get("path"),
+                        "sha256": item.get("sha256"),
+                        "source_type": item.get("source_type"),
+                    }
+                    for item in outcome.result.requests[0].get("references", [])
+                ]
             print(
                 json.dumps(
                     {
@@ -145,6 +166,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                         "requests": len(outcome.result.requests),
                         "status": outcome.result.status.value,
                         "outputs": len(outcome.result.outputs),
+                        "reference_count": len(reference_plan),
+                        "reference_plan": reference_plan,
                     },
                     indent=2,
                 )
@@ -224,7 +247,11 @@ def _handle_character(args):
     if command == "motion-recover":
         if not args.live:
             raise ValueError("motion-recover requires explicit --live")
-        return service.recover_motion(args.character_id, live=True)
+        return service.recover_motion(
+            args.character_id,
+            live=True,
+            owner_risk_override=bool(args.owner_risk_override),
+        )
     if command == "activate":
         return service.approve_and_activate(
             args.character_id, expected_revision=args.expected_revision

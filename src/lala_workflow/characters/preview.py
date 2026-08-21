@@ -170,6 +170,7 @@ class PreviewCoordinator:
         *,
         live: bool,
         legacy_submission_unknown: bool,
+        owner_risk_override: bool = False,
     ) -> CharacterBuild:
         if not live:
             raise PreviewUnavailableError("motion recovery requires explicit --live")
@@ -196,6 +197,7 @@ class PreviewCoordinator:
             build.static_preview,
             destination,
             legacy_submission_unknown=legacy_submission_unknown,
+            owner_risk_override=owner_risk_override,
         )
         motion = self._store_motion(profile, generated, destination)
         subject_lock = dict(generated.subject_lock or {})
@@ -210,6 +212,7 @@ class PreviewCoordinator:
                 "static_preview": "PASS_REUSED",
                 "motion_preview": "PASS",
                 "preview_pipeline": "PASS_RECOVERED",
+                "paid_calls": "KNOWN_2_PLUS_LEGACY_MOTION_UNKNOWN",
             },
             subject_lock=subject_lock or None,
         )
@@ -409,6 +412,7 @@ class RunwayMotionPreviewOperation:
         destination: Path,
         *,
         legacy_submission_unknown: bool,
+        owner_risk_override: bool = False,
     ) -> GeneratedPreview:
         return self._generate(
             profile,
@@ -416,6 +420,7 @@ class RunwayMotionPreviewOperation:
             static_preview,
             destination,
             legacy_submission_unknown=legacy_submission_unknown,
+            owner_risk_override=owner_risk_override,
         )
 
     def _generate(
@@ -426,6 +431,7 @@ class RunwayMotionPreviewOperation:
         destination: Path,
         *,
         legacy_submission_unknown: bool,
+        owner_risk_override: bool = False,
     ) -> GeneratedPreview:
         from ..hashing import sha256_file
         from ..providers.runway_video import RunwayMotionProvider
@@ -475,6 +481,7 @@ class RunwayMotionPreviewOperation:
             provider=provider,
             destination=destination,
             legacy_submission_unknown=legacy_submission_unknown,
+            owner_risk_override=owner_risk_override,
         )
         artifact = outcome.artifact
         operation = outcome.operation

@@ -9,8 +9,8 @@ import pytest
 
 from lala_workflow.cli import main
 from lala_workflow.video.runner import VideoRunOptions, preview_video
+from lala_workflow.video.keyframe_sets import preflight_goal2
 from lala_workflow.video.storage import QA_FIELDS, VIDEO_RUN_FILES, VideoRunStorage
-from lala_workflow.video.validation import ExternalInputBlocked
 
 
 def test_dry_run_writes_exact_evidence_and_makes_zero_submissions(
@@ -47,11 +47,14 @@ def test_run_artifacts_refuse_rewrite(video_project_root: Path) -> None:
         storage.write_json_new(outcome.context, "cost.json", {})
 
 
-def test_verified_owner_voice_allows_production_preview_without_provider_calls() -> None:
+def test_repository_goal2_preflight_accepts_registered_candidate16_v7_without_provider_calls() -> None:
     root = Path(__file__).resolve().parents[1]
     before = set((root / "runs").iterdir())
-    with pytest.raises(ExternalInputBlocked, match="approved talking_medium_closeup"):
-        preview_video(root, VideoRunOptions(preset="tooltip", action="generate"))
+    result = preflight_goal2(root)
+    assert result["status"] == "GOAL2_READY"
+    assert result["v7"]["status"] == "CANDIDATE16_V7_MATCH"
+    assert result["v7"]["selected_candidate_id"] == "v7-b-natural-micro-motion"
+    assert result["provider_submissions"] == result["paid_calls"] == 0
     assert set((root / "runs").iterdir()) == before
 
 

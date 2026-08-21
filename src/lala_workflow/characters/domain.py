@@ -427,6 +427,14 @@ class MotionOperationRecord:
     error_stage: str | None = None
     error_category: str | None = None
     sanitized_error: str | None = None
+    owner_risk_override: bool = False
+    owner_risk_override_reason: str | None = None
+    owner_risk_override_max_new_submissions: int | None = None
+    owner_risk_override_max_new_credits: float | None = None
+    owner_risk_override_max_new_usd: float | None = None
+    owner_risk_override_automatic_retries: int | None = None
+    legacy_operation_id: str | None = None
+    legacy_submission_state: str | None = None
 
     def __post_init__(self) -> None:
         if not self.operation_id or not HASH_RE.fullmatch(self.request_fingerprint):
@@ -466,6 +474,16 @@ class MotionOperationRecord:
             self.artifact_path is None or self.artifact_sha256 is None
         ):
             raise CharacterIntegrityError("successful motion operation requires artifact evidence")
+        if self.owner_risk_override and (
+            self.owner_risk_override_max_new_submissions != 1
+            or self.owner_risk_override_max_new_credits != 25
+            or self.owner_risk_override_max_new_usd != 0.25
+            or self.owner_risk_override_automatic_retries != 0
+            or self.legacy_submission_state != "SUBMISSION_STATE_UNKNOWN"
+            or not self.legacy_operation_id
+            or not self.owner_risk_override_reason
+        ):
+            raise CharacterIntegrityError("owner-risk override bounds/evidence are invalid")
 
     @classmethod
     def from_dict(cls, raw: Mapping[str, Any]) -> MotionOperationRecord:
@@ -504,6 +522,14 @@ class MotionOperationRecord:
             error_stage=(str(raw["error_stage"]) if raw.get("error_stage") else None),
             error_category=(str(raw["error_category"]) if raw.get("error_category") else None),
             sanitized_error=(str(raw["sanitized_error"]) if raw.get("sanitized_error") else None),
+            owner_risk_override=bool(raw.get("owner_risk_override", False)),
+            owner_risk_override_reason=(str(raw["owner_risk_override_reason"]) if raw.get("owner_risk_override_reason") else None),
+            owner_risk_override_max_new_submissions=(int(raw["owner_risk_override_max_new_submissions"]) if raw.get("owner_risk_override_max_new_submissions") is not None else None),
+            owner_risk_override_max_new_credits=(float(raw["owner_risk_override_max_new_credits"]) if raw.get("owner_risk_override_max_new_credits") is not None else None),
+            owner_risk_override_max_new_usd=(float(raw["owner_risk_override_max_new_usd"]) if raw.get("owner_risk_override_max_new_usd") is not None else None),
+            owner_risk_override_automatic_retries=(int(raw["owner_risk_override_automatic_retries"]) if raw.get("owner_risk_override_automatic_retries") is not None else None),
+            legacy_operation_id=(str(raw["legacy_operation_id"]) if raw.get("legacy_operation_id") else None),
+            legacy_submission_state=(str(raw["legacy_submission_state"]) if raw.get("legacy_submission_state") else None),
         )
 
 

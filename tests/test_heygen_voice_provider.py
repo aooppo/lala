@@ -13,6 +13,10 @@ from lala_workflow.video.config import load_video_config
 from lala_workflow.video.domain import VoiceRequest
 
 
+SYNTHETIC_SIGNED_AUDIO_URL = "https://files.heygen.test/generated.wav?" + "signature=private"
+SYNTHETIC_SIGNED_MALFORMED_URL = "https://files.heygen.test/audio.wav?" + "signature=private"
+
+
 class Response:
     def __init__(self, payload, *, status_code=200, content_type="application/json"):
         self.payload = payload
@@ -35,7 +39,7 @@ class Client:
         return Response(
             {
                 "data": {
-                    "audio_url": "https://files.heygen.test/generated.wav?signature=private",
+                    "audio_url": SYNTHETIC_SIGNED_AUDIO_URL,
                     "duration": 10,
                     "request_id": "voice-request-123",
                 }
@@ -59,7 +63,7 @@ class PayloadClient:
 class MalformedResponse(Response):
     def json(self):
         raise ValueError(
-            "malformed https://files.heygen.test/audio.wav?signature=private "
+            f"malformed {SYNTHETIC_SIGNED_MALFORMED_URL} "
             "local-test-secret"
         )
 
@@ -72,8 +76,7 @@ class MalformedClient:
 class HttpErrorResponse(Response):
     def raise_for_status(self):
         raise RuntimeError(
-            "local-test-secret "
-            "https://files.heygen.test/generated.wav?signature=private"
+            "local-test-secret " + SYNTHETIC_SIGNED_AUDIO_URL
         )
 
 
@@ -140,7 +143,7 @@ def test_translates_exact_script_and_downloads_pcm_wav(
         "language": "en",
     }
     assert kwargs["headers"] == {"x-api-key": "local-test-secret"}
-    assert downloads == ["https://files.heygen.test/generated.wav?signature=private"]
+    assert downloads == [SYNTHETIC_SIGNED_AUDIO_URL]
     assert artifact.path == request.output_path
     assert artifact.mime_type == "audio/wav"
     assert artifact.provenance["submission_policy"] == "single_submit_no_automatic_replay"
@@ -195,7 +198,7 @@ def test_redacts_credential_from_submission_failure(video_project_root: Path) ->
     (
         (
             {
-                "audio_url": "https://files.heygen.test/generated.wav?signature=private",
+                "audio_url": SYNTHETIC_SIGNED_AUDIO_URL,
                 "duration": 10,
                 "request_id": None,
             },
@@ -203,7 +206,7 @@ def test_redacts_credential_from_submission_failure(video_project_root: Path) ->
         ),
         (
             {
-                "audio_url": "https://files.heygen.test/generated.wav?signature=private",
+                "audio_url": SYNTHETIC_SIGNED_AUDIO_URL,
                 "duration": 10,
             },
             False,
@@ -250,8 +253,7 @@ def test_rejects_missing_audio_url_with_safe_response_shape(
                     "request_id": "voice-request-123",
                     "duration": 10,
                     "message": (
-                        "local-test-secret "
-                        "https://files.heygen.test/generated.wav?signature=private"
+                        "local-test-secret " + SYNTHETIC_SIGNED_AUDIO_URL
                     ),
                 }
             }

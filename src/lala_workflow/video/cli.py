@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 from typing import Any
 
 
@@ -78,6 +79,31 @@ def configure_parser(subparsers: Any) -> None:
     )
     motion_v7_live.add_argument("--max-runway-credits", required=True, type=float)
 
+    motion_v7_recover = commands.add_parser(
+        "motion-v7-recover",
+        help="recover only missing B/C tasks from the exact guarded Candidate 16 V7 partial run",
+    )
+    _project_root(motion_v7_recover)
+    motion_v7_recover.add_argument("--parent-run-id", required=True)
+    motion_v7_recover.add_argument(
+        "--execute-live",
+        action="store_true",
+        help="explicitly authorize the two remaining paid V7 submissions",
+    )
+    motion_v7_recover.add_argument(
+        "--confirm-missing-bc",
+        action="store_true",
+        help="confirm that only missing V7-B and V7-C may be submitted",
+    )
+    motion_v7_recover.add_argument("--max-runway-credits", required=True, type=float)
+
+    motion_v7_register = commands.add_parser(
+        "motion-v7-register-review",
+        help="validate and register the explicit Candidate 16 V7 Owner review offline",
+    )
+    _project_root(motion_v7_register)
+    motion_v7_register.add_argument("--package", required=True)
+
     motion_generate = commands.add_parser(
         "motion-generate", help="generate bounded Runway motion variations after a reviewed smoke"
     )
@@ -142,6 +168,93 @@ def configure_parser(subparsers: Any) -> None:
     _project_root(promote_candidate)
     promote_candidate.add_argument("--candidate-id", required=True)
     promote_candidate.add_argument("--review-file", required=True)
+    validate_package = keyframe_commands.add_parser(
+        "validate-review-package", help="validate a role-complete Candidate 16 review package"
+    )
+    _project_root(validate_package)
+    validate_package.add_argument("--package", required=True)
+    promote_reviewed = keyframe_commands.add_parser(
+        "promote-reviewed", help="exact-byte promote one selected Candidate 16 package candidate"
+    )
+    _project_root(promote_reviewed)
+    promote_reviewed.add_argument("--package", required=True)
+    promote_reviewed.add_argument("--candidate-id", required=True)
+
+    keyframe_set = commands.add_parser(
+        "keyframe-set", help="build, publish, bind, and preflight role-complete keyframe sets"
+    )
+    keyframe_set_commands = keyframe_set.add_subparsers(
+        dest="keyframe_set_command", required=True
+    )
+    set_build = keyframe_set_commands.add_parser("build", help="build an immutable keyframe set")
+    _project_root(set_build)
+    set_build.add_argument("--set-id", required=True)
+    set_build.add_argument("--review-package", required=True)
+    set_publish = keyframe_set_commands.add_parser(
+        "publish", help="publish an integrity-valid keyframe set"
+    )
+    _project_root(set_publish)
+    set_publish.add_argument("--set-id", required=True)
+    set_bind = keyframe_set_commands.add_parser(
+        "bind-goal2", help="bind Goal 2 to the current published keyframe set"
+    )
+    _project_root(set_bind)
+    set_bind.add_argument("--set-id", required=True)
+    set_preflight = keyframe_set_commands.add_parser(
+        "preflight", help="verify the current Goal 2 character and keyframe binding"
+    )
+    _project_root(set_preflight)
+
+    campaign = commands.add_parser("campaign", help="preview bounded product campaign plans")
+    campaign_commands = campaign.add_subparsers(dest="campaign_command", required=True)
+    coffee_table = campaign_commands.add_parser(
+        "coffee-table", help="preview or prepare the Candidate 16 Coffee Table campaign contract"
+    )
+    _project_root(coffee_table)
+    coffee_table_mode = coffee_table.add_mutually_exclusive_group(required=True)
+    coffee_table_mode.add_argument("--dry-run", action="store_true")
+    coffee_table_mode.add_argument(
+        "--prepare-execution-manifest",
+        action="store_true",
+        help="prepare the offline four-request contract for Owner review",
+    )
+    coffee_table_mode.add_argument(
+        "--live",
+        action="store_true",
+        help="execute only the exact Owner-approved Coffee Table manifest",
+    )
+    coffee_table_mode.add_argument(
+        "--prepare-recovery",
+        action="store_true",
+        help="prepare the exact stopped-run recovery contract using local media only",
+    )
+    coffee_table_mode.add_argument(
+        "--prepare-v3-recovery",
+        action="store_true",
+        help="prepare the zero-call Coffee Table V3 semantic recovery review package",
+    )
+    coffee_table.add_argument(
+        "--recovery-live",
+        action="store_true",
+        help="with --live, execute only the exact Owner-authorized Recovery Manifest V2 TASK-04",
+    )
+    coffee_table.add_argument("--parent-plan", type=Path)
+    coffee_table.add_argument("--parent-plan-sha256")
+    coffee_table.add_argument(
+        "--confirm-owner-authorized-manifest-preparation",
+        action="store_true",
+        help="confirm Owner authorization for zero-call manifest preparation only",
+    )
+    coffee_table.add_argument("--execution-manifest", type=Path)
+    coffee_table.add_argument("--execution-manifest-sha256")
+    coffee_table.add_argument("--failed-live-run")
+    coffee_table.add_argument(
+        "--confirm-owner-authorized-live",
+        action="store_true",
+        help="confirm Owner authorization for the exact paid Live manifest",
+    )
+    coffee_table.add_argument("--max-runway-credits", type=float)
+    coffee_table.add_argument("--max-provider-cost-usd", type=float)
 
     assemble = commands.add_parser("assemble", help="assemble explicitly selected shots")
     _project_root(assemble)

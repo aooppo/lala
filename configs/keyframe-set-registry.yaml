@@ -1,0 +1,9 @@
+schema_version: candidate16-keyframe-set-registry/v1
+revision: 1
+current_set_id: candidate16-keyframe-set-v1
+manifest_path: outputs/keyframe-sets/candidate16-keyframe-set-v1/manifest.json
+manifest_sha256: 12768c83fb3edb5c5c30f9f9c528a2829708c4fdcc8d64331d9b3ff6901454ef
+character_id: character-20260821-001
+publish_event: outputs/keyframe-sets/publish-events/candidate16-keyframe-set-v1-r001.json
+publish_event_sha256: d34610e2902fd1bb5064928fb92ccc49456650dd067b1357420c356a5f9cc9fe
+updated_at: '2026-08-21T06:27:19.190680+00:00'

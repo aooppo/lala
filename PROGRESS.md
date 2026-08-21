@@ -1058,3 +1058,647 @@
   retries **0**. The earlier static task exists and its actual provider charge is not exposed in
   local evidence; acceptance and cost for the earlier motion attempt remain unknown. No motion MP4
   or Human Review Package exists, so the current state is `BLOCKED_SUBMISSION_UNKNOWN`.
+
+## Candidate 16 one-time Owner-risk motion recovery
+
+- Owner explicitly retained the legacy motion attempt as `SUBMISSION_STATE_UNKNOWN` and accepted
+  its possible duplicate-cost risk. Added a separate, audited `owner-risk-override-001` operation;
+  the canonical legacy operation remained byte-identical. The override is hard-capped at one new
+  five-second Runway `gen4_turbo` submission, 25 credits / USD 0.25, and zero automatic retries.
+- Pre-submission recovery/override tests passed **27 tests**, complete offline suite passed
+  **320 tests in 55.31s**, and workflow validate, compileall, static SHA, permission, credential-
+  presence, deterministic fingerprint, and writable runtime-state gates passed. No static or
+  combined preview command ran.
+- The one authorized motion-only submission succeeded as task
+  `c6151a23-9c6d-4fd7-af8c-9d5401a3ff2f`. The output is 1280×720 H.264, 5.041667 seconds,
+  956448 bytes, SHA-256 `4a4945485b30adbd6b1eb76171e1d11c5aab9a388a01f2a0aac0ff9066219bf0`,
+  with actual 25 credits / USD 0.25. Signed download query strings are redacted from durable state.
+- Built `outputs/reviews/candidate16-character-preview/` with exact-byte static/motion copies,
+  source mapping, authority/static/motion/cost manifests, hashes, and blank Owner review material.
+  Candidate 16 remains inactive; activation and all K1/K2/K3/Goal 2 work remain blocked on Owner
+  Human QA. Final state: `READY_FOR_OWNER_CHARACTER_REVIEW`.
+
+## Candidate 16 Owner approval and activation
+
+- Owner explicitly recorded PASS for identity, face, hair, body proportions, wardrobe, jewelry,
+  and motion stability, then supplied `Activate Candidate 16: APPROVED`. Unspecified granular QA
+  fields remained blank; the workflow did not infer additional human decisions.
+- Recorded reviewer `Project owner (explicit human decision)` at
+  `2026-08-21T12:59:49+08:00`, then activated `character-20260821-001` with expected registry
+  revision 4. Activation event `6cb80ebe1b6246c097c085c426fd093d` advanced the registry to
+  revision 5 and made previous active character `lala-v1` inactive.
+- Activation copied the three exact staged authority files into
+  `assets/approved_anchors/characters/character-20260821-001/` using the existing exclusive,
+  hash-verified path. No static/motion generation or other Provider call occurred.
+
+## Candidate 16 K1/K2/K3 generation and Human Review staging
+
+- Reused the previously completed Spec Kit cutover-keyframe design to define K1
+  `pilot_home_context`, K2 `pilot_talking_medium_closeup`, and K3 `pilot_product_present`, with
+  versioned static prompts and deterministic active-character reference selection. Dry runs bound
+  all requests to active Candidate 16 profile v6 SHA-256
+  `659378036a36b44f69b2e5bb4312d1a62446da36b30f52eaf67e1337cfaa434b` and made zero calls.
+- Executed exactly three sequential Runway `gen4_image` candidates per role with concurrency one
+  and zero automatic paid retries. Live runs
+  `LALA-RUNWAY-20260821-050829-PILOT-HOME-KEYFRAME-001`,
+  `LALA-RUNWAY-20260821-051041-PILOT-TALKING-KEYFRAME-001`, and
+  `LALA-RUNWAY-20260821-051239-PILOT-PRODUCT-KEYFRAME-001` each completed 3/3, for nine planned and
+  nine actual Provider submissions. Static-image credits/USD remain
+  `UNKNOWN_NOT_EXPOSED_BY_CURRENT_STATIC_CONTRACT`; no unsupported cost was inferred.
+- Staged exact-byte candidates, role contact sheets, task IDs, hashes, source-run evidence, and a
+  nine-row all-blank Owner QA record under `outputs/reviews/candidate16-keyframes/`. Candidate
+  copies were hash-equal to run outputs; all images decode at 1920x1088 for K1/K3 or 1088x1456 for
+  K2. No candidate was promoted, no keyframe set was built/published, and Goal 2 was not rebound.
+- Verification: focused tests passed 9/9; complete offline suite passed 321 tests in 56.60 seconds;
+  workflow validation, compileall, diff checks, approved-source hashes, and review-schema checks
+  passed. The existing approved-keyframe manifest remains unchanged and Human QA remains blank.
+  Final state: `READY_FOR_OWNER_KEYFRAME_REVIEW`.
+
+## Candidate 16 Henry/PDP conditioning repair and Keyframe Review V2
+
+- Added a role-aware three-slot reference planner instead of truncating or sending a fourth Runway
+  reference. K1 now resolves Candidate 16 face, Candidate 16 full body, and PDP hero; K3 resolves
+  Candidate 16 face, PDP hero, and PDP product-only geometry. K2 generation was unchanged and
+  `K2-002` remained exact bytes at SHA-256
+  `78478b171552472227772f5efc092380b69da6b698cc13182880967e3a26bd59`.
+- Added explicit `--scene-reference`, `--product-reference`, `--reference-source-url`, and
+  `--reference-sku` generation inputs with project containment, regular-file/non-symlink, bounded
+  size, decoded MIME/dimensions, SHA-256, clean HTTPS provenance, deterministic order, duplicate,
+  and hard provider-limit gates. Request and anchor-hash evidence records every slot and semantic
+  source; dry-run CLI output exposes the exact plan.
+- Focused planner/provider/character/config tests passed **32 tests**; the complete offline suite
+  passed **329 tests in 58.84s**; compileall, workflow validation, and `git diff --check` passed.
+  Zero-call K1 dry run `LALA-RUNWAY-20260821-054506-PILOT-HOME-KEYFRAME-001` and K3 dry run
+  `LALA-RUNWAY-20260821-054507-PILOT-PRODUCT-KEYFRAME-001` each recorded three requests, three exact
+  role-aware references per request, zero tasks, zero outputs, zero submissions, and zero paid calls.
+- Owner-authorized live execution used six independent one-result `gen4_image` runs to preserve the
+  active smoke gate: K1 runs at `054548`, `054636`, and `054724`, followed by K3 runs at `054809`,
+  `054857`, and `054955`. All six succeeded with one task and one 1920×1088 PNG each. Accounting is
+  K1 **3**, K2 **0**, K3 **3**, total new submissions **6**, automatic paid retries **0**. Static
+  credits/USD remain `UNKNOWN_NOT_EXPOSED_BY_CURRENT_STATIC_CONTRACT`.
+- Built `outputs/reviews/candidate16-keyframes-v2/` with exact-byte K1/K3 candidates, exact-byte
+  retained K2-002, contact/reference sheets, exact PDP reference copies and provenance, a manifest,
+  instructions, and seven all-blank Human QA rows. V1 remains byte-unchanged historical evidence;
+  approved keyframes were not changed, and no promotion, publish, keyframe-set build, Goal 2 rebind,
+  or Coffee Table video ran. Final state: `READY_FOR_OWNER_KEYFRAME_REVIEW`.
+
+## Candidate 16 Checkpoint — Owner keyframe promotion, set publish, and Goal 2 rebind
+
+- Applied Spec Kit feature `specs/009-candidate16-keyframe-publish/` with specification, plan,
+  research, data model, CLI/evidence contract, quickstart, task traceability, consistency analysis,
+  implementation, and convergence audit.
+- Recorded the Owner's explicit Human PASS at `2026-08-21T14:26:24+08:00` for exactly
+  `K1-V2-002`, `K2-002`, and `K3-V2-002`. Review SHA-256 is
+  `e083676c75933f550fb81bbad5b897265847e46cd4406e674961ee4b44cf873d`.
+  Non-selected rows remain blank. K2 keeps hands/scene/product/wine-glass fields blank as
+  role-inapplicable; all K2 identity/readiness requirements are PASS.
+- Exact-byte promoted all three selections. Staged and approved SHA-256 pairs are respectively
+  `3ad624df44cc31f56309a45ae4ba9577d526693a7332ee97fb7fd9f914a7043c`,
+  `78478b171552472227772f5efc092380b69da6b698cc13182880967e3a26bd59`, and
+  `7281237344ddfc81b7f4635a83410d87b109688b03be4188f648f20dff6fd631`.
+- Built `candidate16-keyframe-set-v1` with member digest
+  `fca278243567a74fe8dde91572f6ddb405b141fc9ce22495b0667f55abc7ae36` and manifest SHA-256
+  `12768c83fb3edb5c5c30f9f9c528a2829708c4fdcc8d64331d9b3ff6901454ef`. Published event revision 1
+  has SHA-256 `d34610e2902fd1bb5064928fb92ccc49456650dd067b1357420c356a5f9cc9fe`.
+  Goal 2 binding revision 1 has SHA-256
+  `b60fa5638f871e86169f187c6d8d78e9f67d63db09feb86a74698ea80db915d6` and resolves active
+  `character-20260821-001` plus the exact K1/K2/K3 selections.
+- Added provider-neutral review-package validation, promotion, immutable set, publish pointer,
+  Goal 2 binding/preflight, current-authority resolution, and a separately tested motion-only
+  Coffee Table planner. Existing talking presets are unchanged; the planner adds no HeyGen,
+  dialogue, TTS, or lip sync and cannot execute live.
+- Current historical V7 uses legacy Lady LaLa SHA
+  `ab53d9d0551bcf926a41072567493cf640815d99ff92503d9bc111ec3ce7b9ca`, not Candidate 16 K1.
+  Methodology is reusable, media/Human PASS is character-bound. Preflight stops at
+  `READY_FOR_OWNER_CANDIDATE16_V7_EXECUTION`. A separately authorized V7 would be exactly three
+  five-second Runway `gen4_turbo` tasks, 15 generated seconds, at most 75 credits / projected USD
+  0.75, with zero automatic paid retries.
+- This checkpoint made Provider submissions **0**, paid calls **0**, new K1/K2/K3 generation **0**,
+  Coffee Table live calls **0**, and Coffee Table dry-run records **0** because the real V7 gate
+  correctly blocked before preview allocation.
+- Verification: focused Candidate 16 plus existing K2/config/pilot suites passed **46 tests**;
+  complete offline suite passed **336 tests in 56.61s**. `compileall`, static/video workflow
+  validation, CLI help/real preflight, and `git diff --check` passed. All pre-existing approved
+  sources and V1 files match their pre-mutation SHA lists; all V2 files except the explicitly
+  authorized review CSV match, including every generated PNG and PDP reference. Secret scan found
+  only the existing intentional redaction/signed-URL test fixtures and no credential material.
+  Spec Kit convergence checked 18 FRs, 8 success criteria, 13 acceptance scenarios, 7 plan
+  decisions, and all constitution principles with no remaining implementation task.
+
+## Candidate 16 V7 live attempt — partial, stopped on insufficient Runway credits
+
+- Owner authorized only the fixed Candidate 16 V7 A/B/C batch: Runway `gen4_turbo`, three
+  five-second tasks, maximum 75 credits / projected USD 0.75, concurrency one, and zero automatic
+  paid retries. The request batch bound all three candidates to active Candidate 16 K1
+  `K1-V2-002`, SHA-256
+  `3ad624df44cc31f56309a45ae4ba9577d526693a7332ee97fb7fd9f914a7043c`; legacy SHA
+  `ab53d9d0551bcf926a41072567493cf640815d99ff92503d9bc111ec3ce7b9ca` was not used.
+- Live run `LALA-VIDEO-20260821-063716-MOTION-V7-001` is append-only `PARTIAL`. V7-A
+  `v7-a-stability-first` succeeded as Runway task `80f25b90-c3e9-4512-8fd2-60ed2d64b885`, using
+  25 actual credits. Its 1280×720 H.264 MP4 is 5.041667 seconds, 2,101,004 bytes, SHA-256
+  `e42ea3dfe0a9bbe50ac11e3b136639ffed4486437803fec3b4a755782f4f2ef1`.
+- V7-B submission was rejected before a task ID with Runway HTTP 400: `You do not have enough
+  credits to run this task.` It has no media and no reported actual credits. The fail-stop policy
+  then left V7-C `not_submitted`. Accounting: planned tasks 3, created provider task IDs 1,
+  successful outputs 1, rejected submission attempts 1, replacement tasks 0, automatic retries 0,
+  confirmed actual credits 25 / USD 0.25.
+- No three-video comparison or Owner review package was created, no winner was selected, Goal 2 was
+  not marked ready, and Coffee Table was not run. Do not rerun the whole V7 command because it would
+  duplicate the already successful paid V7-A. Continuing requires sufficient Runway balance and an
+  explicit task-aware recovery path that preserves A and submits only missing B/C under a renewed
+  owner authorization. Current state: `BLOCKED_EXTERNAL_INSUFFICIENT_RUNWAY_CREDITS`.
+
+## Candidate 16 V7 task-aware recovery — complete, awaiting Owner Human Review
+
+- After the Owner replaced the API key and replenished credits, added a dedicated append-only
+  `video motion-v7-recover` path. It verifies the exact partial parent run, Candidate 16 K1
+  `K1-V2-002` SHA-256
+  `3ad624df44cc31f56309a45ae4ba9577d526693a7332ee97fb7fd9f914a7043c`, the durable V7-A task and
+  media hash, V7-B's no-task credit rejection, V7-C's unsubmitted state, blank Human QA, and the
+  absence of any prior recovery. It constructs only B/C requests, requires an exact 50-credit cap,
+  uses concurrency one and zero automatic paid retries, and blocks re-invocation.
+- Recovery run `LALA-VIDEO-20260821-064916-MOTION-V7-RECOVERY-001` succeeded with exactly two new
+  Runway `gen4_turbo` five-second tasks. V7-B task
+  `658acfd3-8bfd-46d8-a1d3-8fc7ea6a75f8` produced a 1280×720 H.264 MP4, 5.041667 seconds,
+  2,068,182 bytes, SHA-256
+  `85f7783dc3c59fa6665899f2b8c510866db0835ddaa3145e5d71de764d3b41e4`. V7-C task
+  `cf63df92-1973-4699-bfe6-9a807b1614d5` produced a 1280×720 H.264 MP4, 5.041667 seconds,
+  1,029,574 bytes, SHA-256
+  `939daffd01f60273735f5facf0a090f381d55847b40ad2ffa42d248627cfd5e7`.
+- Recovery actual cost was 50 credits / USD 0.50. Including inherited V7-A, the complete Candidate
+  16 V7 evidence has three durable task IDs, three successful outputs, 75 confirmed actual credits
+  / USD 0.75, zero replacement tasks, and zero automatic retries. V7-A was not resubmitted.
+- Built `outputs/reviews/candidate16-v7/` with exact-byte A/B/C copies, hash manifest, all-blank
+  three-row Owner QA, instructions, and a deterministic 1920×360 five-second A/B/C comparison MP4
+  (left/center/right) SHA-256
+  `b9d94a3422b811a2ed599c2a422681736f2efb14600d330691971bed397ba369`.
+- Full offline regression passed **339 tests in 59.37 seconds** before live execution; the focused
+  recovery/V7 suite passed **19 tests** after implementation. Static/video validation, compileall,
+  diff checks, approved K1/K2/K3 hashes, inherited V7-A hash, and durable secret/signed-URL scans
+  passed. No winner was inferred, no Coffee Table run was created, and no K1/K2/K3 media changed.
+  Current state: `READY_FOR_OWNER_CANDIDATE16_V7_REVIEW`.
+
+## Candidate 16 V7 Owner Review — V7-B registered, Coffee Table authorization ready
+
+- Recorded the Owner's explicit review only in
+  `outputs/reviews/candidate16-v7/review.csv` at `2026-08-21T15:10:00+08:00`. V7-B Natural Micro
+  Motion is the unique fully passing and MTL-ready winner, including Visual Identity, Face, Age,
+  Hair, Body Proportions, Wardrobe, Jewelry, Mouth, Teeth, Eyes, Background, Motion, and Technical
+  Export. V7-A is not selected for excessive subject position/scale movement; V7-C is not selected
+  because B provides the better natural-motion/framing-stability balance. Review SHA-256 is
+  `a62f9453d8070d30e25f6d1cad4a50fa6b42c6c94ab38c0b5b8433ef45e0c1ff`.
+- Added a fail-closed offline Candidate 16 V7 registration path. It validates the A-success parent
+  `LALA-VIDEO-20260821-063716-MOTION-V7-001`, B/C-success recovery
+  `LALA-VIDEO-20260821-064916-MOTION-V7-RECOVERY-001`, the canonical A/B/C relationship, current K1
+  SHA `3ad624df44cc31f56309a45ae4ba9577d526693a7332ee97fb7fd9f914a7043c`, all task/media/prompt
+  hashes, exact review provenance, human attribution, and blank append-only reviews. Collision-safe
+  `registration.json` SHA-256 is
+  `e03cf5add6c8a2a6ec27b2326269590904b4f2a22f5fdb7c41a6d8bcc7b9ce9b`; selected V7-B task is
+  `658acfd3-8bfd-46d8-a1d3-8fc7ea6a75f8`, media SHA is
+  `85f7783dc3c59fa6665899f2b8c510866db0835ddaa3145e5d71de764d3b41e4`, and prompt SHA is
+  `b44906b8a786564406e42d740ebb7a4e68390b88c490697b5b54de8ca11ebb67`.
+- Goal 2 real preflight now returns `GOAL2_READY`, bound to active Candidate 16 and exact published
+  K1/K2/K3 members. It prefers the validated Candidate 16 V7 registration and leaves the legacy
+  Lady LaLa V7 evidence historical.
+- Coffee Table real dry-run `COFFEE-TABLE-DRY-20260821-071433-640204` produced motion-only plan
+  `outputs/campaign-previews/COFFEE-TABLE-DRY-20260821-071433-640204/plan.json`, SHA-256
+  `ed30e4984dd488cde79188e7e327bc4472ab0c331125a0c600d739a0d388ac5f`. It binds V7-B, Candidate
+  16, the published keyframe set, product IN3725, Henry room/performance semantics, six beats / 20
+  seconds, and guarded 1:1 plus 9:16 delivery. The earlier pre-amendment dry-run
+  `COFFEE-TABLE-DRY-20260821-071348-305664` remains immutable zero-call evidence.
+- Exact recommended non-executed Live plan: Runway `gen4_turbo`, four sequential tasks × five
+  seconds, 20 generated seconds, 16:9 safe master, guarded local 1:1/9:16 reframes, concurrency one,
+  zero automatic replacement tasks, maximum 100 Runway credits / projected USD 1.00. Native-ratio
+  fallback is Option B: five tasks / 25 seconds / maximum 125 credits / projected USD 1.25 and
+  requires separate authorization. Current CLI Live execution is deliberately unavailable.
+- New activity for this Owner-review continuation: provider constructions **0**, submissions **0**,
+  provider task IDs **0**, HTTP requests **0**, paid calls **0**, Coffee Table Live calls **0**.
+  Parent/recovery blank review hashes remain
+  `028de387676d0515de46d0f2574f3d2e08a35f17bedbeaca21c274fae6ebf89c` and
+  `206c9a29876bbb9e87064d83b85628245d1e06866ade87c8f52372589732f6dd`; original package manifest
+  and ZIP remain `642bfb0db4d988233589271c8a17b00c8750c1f11ead2e46cfcccb919bd8fca6` and
+  `2bc6b20f15aa7bda0b65c3f153ec6d6e4b8e21c0aede31c7c66e911b30151b7f`.
+- Verification: focused V7/Goal 2/Coffee Table suite passed **29 tests**; final post-state focused suite
+  passed **17 tests**; complete offline suite passed **343 tests in 58.60s**. `compileall`,
+  `git diff --check`, static validation, video validation (`paid_calls: 0`), original review-package
+  ZIP integrity, exact A/B/C package-media hashes, and the high-confidence secret/signed-query scan
+  passed. Static 10/5/5 previews and all three Goal 2 preset previews completed with zero paid calls;
+  planned Goal 2 calls were product page 10, tooltip 4, and homepage 13. Every approved source hash
+  matches the pre-review baseline captured at the start of this continuation, including all five
+  original anchor hashes from Checkpoint 1 and the three Candidate 16 K1/K2/K3 approved hashes.
+- Terminal operational state: `READY_FOR_COFFEE_TABLE_LIVE_AUTHORIZATION`. Coffee Table paid Live
+  was not executed and still requires a separate explicit Owner authorization.
+
+## Coffee Table execution manifest — ready for Owner contract review
+
+- Added the offline-only `video campaign coffee-table --prepare-execution-manifest` path. It
+  requires the exact frozen parent path and SHA
+  `ed30e4984dd488cde79188e7e327bc4472ab0c331125a0c600d739a0d388ac5f` plus the explicit
+  manifest-preparation confirmation. The command has no Live/provider branch and validates the
+  current Candidate 16, published K1/K2/K3 set, V7-B, IN3725, motion-only semantics, four-task
+  limits, prompt bytes, and approved keyframe bytes before allocating output.
+- Frozen future requests: Task 01 uses K1 for establishing plus walk start; Task 02 uses K3 for
+  walk completion plus glass placement; Task 03 uses K3 for product detail; Task 04 uses K3 for
+  controlled sit plus hero ending. Every request is Runway `gen4_turbo`, `1280:720` (16:9), five
+  seconds, MP4, 25 projected credits / USD 0.25, with zero submission retries and replacements.
+  K2 remains validated authority but is intentionally excluded as a portrait talking source.
+- Deterministic assembly preserves the parent 0:00–0:20 six-beat order: Tasks 01/02 are fully
+  consumed, Task 03 uses `[0,3)` and discards `[3,5)`, Task 04 uses `[0,5)`, and its terminal hero
+  frame is held locally for two seconds. Native-ratio generation remains unauthorized; 1:1 and
+  9:16 remain guarded local reframes only.
+- Final Owner-review evidence is
+  `outputs/campaign-execution-manifests/COFFEE-TABLE-EXEC-20260821-074417-152920/execution-manifest.json`,
+  SHA-256 `69746bff9ee06a4c6c762168d30151a6aab692f245f7a16271607cd716cf9b26`.
+  Its human reviewer, decision, and notes fields are blank and `live_authorized` is false.
+  The earlier zero-call preparation `COFFEE-TABLE-EXEC-20260821-074036-356077` is retained as
+  pre-final append-only evidence; it was superseded before review when exact prompt text and the
+  K3 held-glass continuity warning were embedded directly in the contract.
+- Verification: focused Coffee Table suite passed **13 tests**; complete offline suite passed
+  **354 tests in 58.75 seconds**. `compileall`, video validation (`paid_calls: 0`),
+  `git diff --check`, new-scope credential scan, exact manifest rehash, and before/after SHA-256
+  comparison of every approved anchor/keyframe/voice/script source passed. Provider constructions,
+  submissions, provider task IDs, HTTP requests, paid calls, HeyGen calls, and TTS calls are all
+  **0**.
+- Terminal operational state:
+  `READY_FOR_OWNER_COFFEE_TABLE_EXECUTION_MANIFEST_REVIEW`. No Coffee Table Live media exists and
+  this manifest SHA has not been authorized for paid execution.
+
+## Coffee Table execution manifest V2 — continuity correction ready for Owner review
+
+- Recorded V1 SHA-256 `69746bff9ee06a4c6c762168d30151a6aab692f245f7a16271607cd716cf9b26`
+  as `REJECT_FOR_LIVE` / `MATERIAL_CONTINUITY_RISK` in append-only Owner review evidence SHA-256
+  `67c71050e690781bb0e990710ccf3aba9603f7f3205811db454a122ede9e5913`. V1 is historical and cannot
+  authorize Live.
+- V2 preserves the parent plan, Candidate 16/K1/K2/K3/V7-B authority, six-beat story order, four
+  five-second `gen4_turbo` tasks, 20 generated seconds, concurrency one, zero paid retries or
+  replacements, and the 100-credit / projected USD 1.00 hard caps. Task 01 still uses K1 and Task
+  02 still uses K3 to complete the walk and place the glass.
+- Task 03 now uses frozen product-only PDP `02.jpg`, SHA-256
+  `4bf6e13b82f9c9c4d4525180aa412ebc22e4ca6c541e6d9c33c905271814b5c5`, so the 10–13 second
+  product cutaway cannot reintroduce Candidate 16 or a held glass. Task 04 now depends on Task 02
+  success and uses its deterministically extracted `LAST_VALID_FRAME`; Task 02 MP4 and extracted
+  PNG hashes remain `RUNTIME_BOUND` until a separately authorized execution records and reverifies
+  them. The exact FFprobe frame count and FFmpeg `frame_count - 1` extraction rule permits no
+  aesthetic frame choice and makes zero provider calls.
+- Final review artifact is
+  `outputs/campaign-execution-manifests/COFFEE-TABLE-EXEC-20260821-075922-716655/execution-manifest-v2.json`,
+  SHA-256 `ce3f280164907aba6468a72c9e3b19a15a77cc8b9db374f4729928b0e1defdea`. The intermediate V2
+  manifests remain append-only pre-final evidence; the final contract also selects Task 04's
+  `LAST_VALID_FRAME` for the two-second local hero hold instead of assuming a literal 5.000-second
+  timestamp.
+- Verification: focused Coffee Table tests passed **15 tests**; complete offline suite passed
+  **356 tests in 59.39 seconds**. Real local FFprobe/FFmpeg last-frame extraction, `compileall`,
+  video validation (`paid_calls: 0`), `git diff --check`, exact manifest rehash, new-scope secret
+  scan, and before/after comparison of all 35 approved-source hashes passed. Provider submissions,
+  task IDs, HTTP requests, paid calls, HeyGen calls, and TTS calls remain **0**.
+- Terminal operational state:
+  `READY_FOR_OWNER_COFFEE_TABLE_EXECUTION_MANIFEST_REVIEW`. Review fields are blank,
+  `live_authorized` is false, no Coffee Table media exists, and no Live entry was executed.
+
+## Coffee Table Live execution — implementation and paid preflight
+
+- Owner authorized only Manifest V2 SHA-256
+  `ce3f280164907aba6468a72c9e3b19a15a77cc8b9db374f4729928b0e1defdea` for one bounded Live run:
+  Runway `gen4_turbo`, four sequential five-second tasks, 100 credits / projected USD 1.00,
+  concurrency one, zero paid retries/replacements, and strict stop-on-first-failure/ambiguity.
+- Added a manifest-bound Live CLI and provider-neutral executor with static authority revalidation,
+  immediate durable task-ID events, no-ID ambiguity stop, current source/prompt hash checks,
+  Task 02 `LAST_VALID_FRAME` lineage, exact local 20-second assembly, local-only 1:1/9:16
+  derivatives, append-only/redacted evidence, blank Human QA, and no automatic approval.
+- Paid preflight passed before any call: exact Manifest rehash, real authority validation, configured
+  local credential presence, focused **27 passed**, complete offline suite **368 passed in 64.65s**,
+  `compileall`, video validation (`paid_calls: 0`), CLI contract inspection, `git diff --check`,
+  new-scope secret scan, and all 35 approved-source before/after hashes. No provider was constructed
+  by these checks and submissions/task IDs/HTTP/paid calls remained **0**.
+- State at this checkpoint: `READY_TO_EXECUTE_OWNER_AUTHORIZED_COFFEE_TABLE_LIVE`. The next command
+  must bind the exact manifest SHA and stop without later/replacement submissions on any failure.
+
+## Coffee Table Live execution — stopped exactly on Task 03 failure
+
+- Executed the one Owner-authorized command against exact Manifest V2 SHA
+  `ce3f280164907aba6468a72c9e3b19a15a77cc8b9db374f4729928b0e1defdea`. Live run is
+  `LALA-VIDEO-20260821-082100-COFFEE-TABLE-LIVE-001`; preflight passed before provider creation.
+- Task 01 succeeded as Runway task `43da0f57-b584-4738-bbf1-05c33f653a3f`, actual 25 credits.
+  Raw MP4 SHA-256 is `2c61cb10a6563d9d4c1e43811be17ef06c3244fc6eb2356d349f064cff6ffd4b`,
+  1280×720 H.264, 5.041667 seconds.
+- Task 02 succeeded as Runway task `a7bb1630-21ff-4a2e-8d40-c3c9085d45ac`, actual 25 credits.
+  Raw MP4 SHA-256 is `9565691a30e312518cc867792063194ae2a667b70d586fbee06d821cc9b7413f`,
+  1280×720 H.264, 5.041667 seconds. Deterministic lineage counted 121 decoded frames, selected
+  zero-based frame 120, and produced PNG SHA-256
+  `f9b3c1c8bd0c663ca4c035e838a525797a5fb88047169cd2c800d44aa4ffaae0` with zero provider calls.
+- Task 03 received durable Runway task ID `03b195ab-98b0-4631-a845-03843656cbc5` and failed with
+  provider code `INTERNAL.BAD_OUTPUT.CODE01`, message `An unexpected error occurred.`, and actual
+  0 credits. The executor immediately stopped. Task 04 was never submitted; no retry, replacement,
+  fifth task, native-ratio generation, assembly, or review-ready claim occurred.
+- Final accounting: submissions/task IDs **3**, successful outputs **2**, failed tasks **1**,
+  confirmed actual credits **50** / USD **0.50**, automatic paid retries **0**, automatic
+  replacements **0**. All 35 approved-source hashes remain exactly unchanged.
+- Terminal operational state: `STOPPED_TASK_FAILED`. This is the required fail-stop outcome, not
+  `READY_FOR_OWNER_REVIEW`; the exact Manifest SHA is now consumed and the workflow blocks another
+  automatic execution against it. Post-run Spec Kit convergence checked 18 functional
+  requirements, 7 success criteria, 7 acceptance scenarios, 8 plan decisions, and all 5
+  constitution principles with no remaining implementation gap.
+
+## Coffee Table failed-task recovery — ready for Owner manifest review
+
+- Implemented Spec Kit feature `012-coffee-table-recovery` as a provider-free offline path. It
+  keeps parent Manifest V2 SHA
+  `ce3f280164907aba6468a72c9e3b19a15a77cc8b9db374f4729928b0e1defdea` and failed Live run
+  `LALA-VIDEO-20260821-082100-COFFEE-TABLE-LIVE-001` read-only. Original provider-results SHA
+  remains `111a05f526944b26381fdf023cbcba4d8aaa58124490e3f7e9ceeedc3301c609`.
+- Historical Task 01 remains `SUCCEEDED`, provider task
+  `43da0f57-b584-4738-bbf1-05c33f653a3f`, MP4 SHA
+  `2c61cb10a6563d9d4c1e43811be17ef06c3244fc6eb2356d349f064cff6ffd4b`, 25 credits. Historical
+  Task 02 remains `SUCCEEDED`, provider task `a7bb1630-21ff-4a2e-8d40-c3c9085d45ac`, MP4 SHA
+  `9565691a30e312518cc867792063194ae2a667b70d586fbee06d821cc9b7413f`, 25 credits. Historical
+  Task 03 remains the real `FAILED` provider task `03b195ab-98b0-4631-a845-03843656cbc5`, error
+  `INTERNAL.BAD_OUTPUT.CODE01`, actual 0 credits; it was not retried, replaced, or reclassified.
+- Prepared recovery `COFFEE-TABLE-RECOVERY-20260821-164849-001`. `LOCAL-TASK-03.mp4` consumes PDP
+  SHA `4bf6e13b82f9c9c4d4525180aa412ebc22e4ca6c541e6d9c33c905271814b5c5` with fixed center crop
+  `1280:720:0:280` and center-anchored zoom `1+0.035*on/71`. Output SHA is
+  `edda268e70ce2af85ab4e11b93e684bbfd363b098f692bb45ae369f0c5928cef`: exactly 3.000 seconds,
+  72 frames, 1280×720, 24 fps, H.264/yuv420p, no audio, 0 credits / USD 0.
+- Proposed Task 04 input is only Task 02 zero-based frame 96. The deterministic PNG is
+  `outputs/broll/COFFEE-TABLE-RECOVERY-20260821-164849-001/TASK-02-frame-000096.png`, SHA
+  `97160f2a6e87400ccc0f5ea8d471443ece7d6e4679159b2dcb4f5ef1853094f2`, 1280×720 RGB. Visual
+  inspection confirms the wine glass is on the table, Candidate 16's hands are empty, and she
+  remains visible beside the sofa; this records composition facts only, not creative approval.
+  Frozen v3 prompt SHA is `e73cc7844806f8a25249c22da261e57df67ba7c3762172746b33a3b45b24f669`.
+- Append-only recovery manifest is
+  `outputs/campaign-recovery-manifests/COFFEE-TABLE-RECOVERY-20260821-164849-001/coffee-table-recovery-manifest.json`,
+  SHA `8adaab7e3c3c128e7b1ae8c160804002aabae6b7a3ce11b5bb00646a2917b7b4`. It freezes the exact
+  eight-segment 20-second master, guarded-local-only 1:1/9:16 delivery, and blocks native-ratio
+  provider regeneration.
+- Verification: focused recovery **8 passed**, Coffee Table regression **35 passed**, full offline
+  suite **376 passed in 72.89s**, compileall, `git diff --check`, video validation (`status: valid`,
+  `paid_calls: 0`), exact media/manifest inspection, visual frame inspection, and recovery-scope
+  secret scan passed. All 35 approved-source hashes match the pre-work snapshot and approved-anchor
+  baselines; original parent manifest and provider-results hashes remain unchanged. Final Spec Kit
+  convergence checked 19 functional requirements, 7 success criteria, 14 acceptance scenarios,
+  8 plan decisions, and all 5 constitution principles with no remaining gap.
+- Accounting: historical actual 50 credits / USD 0.50; local recovery 0 / USD 0; projected
+  additional Task 04 25 credits / USD 0.25; projected final 75 credits / USD 0.75. Provider
+  submissions during recovery **0**; paid calls **0**; automatic retries/replacements **0 / 0**.
+- Terminal operational state: `READY_FOR_OWNER_COFFEE_TABLE_RECOVERY_REVIEW`. Task 04 is
+  `FUTURE_NOT_SUBMITTED`; wait for separate Owner authorization of recovery-manifest SHA
+  `8adaab7e3c3c128e7b1ae8c160804002aabae6b7a3ce11b5bb00646a2917b7b4`.
+
+## Coffee Table Recovery Manifest V2 — Frame 92 selected, ready for Owner manifest review
+
+- Recorded the explicit Project Owner decision in the existing source-frame review evidence:
+  zero-based TASK-02 frame 92 is selected; all nine supplied visual/readiness fields are `PASS`.
+  Frame 88 and frame 96 are only `NOT SELECTED`; their subjective QA fields remain blank and no
+  visual failure was inferred. Reviewer is `Project owner (explicit human decision)` at
+  `2026-08-21T20:47:40+08:00`. Updated review CSV SHA is
+  `7067c48fe59a87dffea2f74c7fd302deac4a8d8d3a967a34a9f0d972ee8221fa`; updated frame-review
+  manifest SHA is `8a0b888f51cd47523d98ed8ee7ffa3c550112257da0ad9af0b6c596a4bff5ce1`.
+- Revalidated Frame 92 as a regular non-symlink decodable 1280×720 RGB PNG, SHA
+  `95f68fa1f9bd3dcf6db94c2298511a224484c85c1fc5f278c3c67aa72e765e2e`, extracted only by
+  zero-based index from TASK-02 SHA
+  `9565691a30e312518cc867792063194ae2a667b70d586fbee06d821cc9b7413f`. Approximate `~3.83s`
+  remains informational and is not extraction authority.
+- Created append-only Recovery Manifest V2 ID `COFFEE-TABLE-RECOVERY-20260821-204901-001` at
+  `outputs/campaign-recovery-manifests/COFFEE-TABLE-RECOVERY-20260821-204901-001/coffee-table-recovery-manifest-v2.json`,
+  SHA `e97ea0d34f4ea541ab07e6898083e7a35c3b82502030f8f40a06d58fb43e6cc3`. It supersedes the
+  frame-96 execution-source decision only; previous manifest SHA
+  `8adaab7e3c3c128e7b1ae8c160804002aabae6b7a3ce11b5bb00646a2917b7b4` remains byte-identical
+  historical evidence, and frame 96 remains valid historical evidence that was not selected.
+- V2 freezes TASK-04 to Runway `gen4_turbo`, Frame 92 input SHA above, unchanged v3 prompt SHA
+  `e73cc7844806f8a25249c22da261e57df67ba7c3762172746b33a3b45b24f669`, five seconds,
+  `1280:720`, zero retries/replacements, and `FUTURE_NOT_SUBMITTED` / `submission_authorized=false`.
+  The 20-second timeline, 16:9 master, guarded-local-only 1:1/9:16 policy, and budget remain exact.
+- Verification passed: structured old/V2 drift validation, Coffee Table focused **35 passed**,
+  workflow validation, video validation (`status: valid`, `paid_calls: 0`), compileall,
+  `git diff --check`, secret scan, and before/after protected hashes. Approved-source aggregate SHA
+  remains `9c228cd1a31952d0709738f3891a3d3e335afac1e20cb9c0bccea40dd893acf2`; TASK-01, TASK-02,
+  historical TASK-03 FAILED/provider-results, LOCAL-TASK-03, Parent Manifest, old Recovery
+  Manifest, frame 96, and the v3 prompt remain unchanged.
+- Accounting remains historical actual 50 credits / USD 0.50, local recovery 0 / USD 0,
+  future TASK-04 projected 25 credits / USD 0.25, projected completed total 75 credits / USD 0.75.
+  This checkpoint created provider submissions **0**, generation HTTP calls **0**, new task IDs
+  **0**, paid calls **0**, and additional credits **0**.
+- Terminal operational state: `READY_FOR_OWNER_COFFEE_TABLE_RECOVERY_MANIFEST_REVIEW`. Recovery
+  Manifest V2 Human review fields are null and `live_authorized=false`; TASK-04 remains
+  `NOT_SUBMITTED` pending separate Owner approval of V2 SHA
+  `e97ea0d34f4ea541ab07e6898083e7a35c3b82502030f8f40a06d58fb43e6cc3`.
+
+## Coffee Table Recovery V2 — Owner-authorized TASK-04 Live implementation and preflight
+
+- Owner authorization is bound only to Recovery ID `COFFEE-TABLE-RECOVERY-20260821-204901-001`,
+  Manifest V2 SHA `e97ea0d34f4ea541ab07e6898083e7a35c3b82502030f8f40a06d58fb43e6cc3`,
+  TASK-02 zero-based Frame 92 PNG SHA
+  `95f68fa1f9bd3dcf6db94c2298511a224484c85c1fc5f278c3c67aa72e765e2e`, prompt v3 SHA
+  `e73cc7844806f8a25249c22da261e57df67ba7c3762172746b33a3b45b24f669`, Runway
+  `gen4_turbo`, five seconds, `1280:720`, one submission/task, at most 25 credits / USD 0.25,
+  and zero automatic paid retries/replacements.
+- Added the dedicated `--live --recovery-live` coordinator without changing the historical
+  four-task executor. It validates the V2/transitive protected hashes before provider allocation,
+  records PREPARED/SUBMITTING/task-ID/SUBMITTED/terminal states append-only, treats no-ID submit
+  ambiguity as `BLOCKED_SUBMISSION_UNKNOWN`, never replaces a known task ID, downloads exactly one
+  TASK-04 MP4, and records actual/unknown cost facts without serializing credentials or signed URLs.
+- Successful TASK-04 execution proceeds to a deterministic local eight-segment master: exactly
+  480 frames / 20 seconds at 24 fps, 1280×720 H.264/yuv420p, silent. The 18–20 second hold uses an
+  explicitly decoded and hashed last-valid TASK-04 frame. Recovery V2 has no Owner-approved
+  objective subject/ROI safe-area contract, so 1:1 and 9:16 fail closed as `BLOCKED_SAFE_AREA`;
+  no guessed crop or native-ratio Provider generation is permitted.
+- The final package copies TASK-01, TASK-02, LOCAL-TASK-03, TASK-04, and the 16:9 master with hash
+  verification, includes manifest/assembly/provider/cost/integrity/safe-area evidence, and creates
+  all 25 Owner review rows with blank decision, notes, reviewer, and reviewed-at fields. Success can
+  end only at `READY_FOR_OWNER_REVIEW`; no approval, final, MTL readiness, or promotion is written.
+- Offline verification before any real submit: focused Recovery V2 **12 passed in 27.88s**;
+  complete Coffee Table regression **47 passed in 41.81s**; full offline suite
+  **388 passed in 102.50s**; workflow validation passed; video validation returned `status: valid`
+  and `paid_calls: 0`; compileall and `git diff --check` passed. Structured V2/transitive preflight
+  passed; tracked exact-credential matches and runtime signed-query matches are both zero.
+- Formal code contract/environment check after project `.env` loading: `VIDEO_ALLOW_LIVE_CALLS`
+  enabled **YES** and `RUNWAYML_API_SECRET` configured **YES**. `RUNWAY_ALLOW_LIVE_CALLS` is also
+  enabled but is not required by this Goal 2 path; no `COFFEE_TABLE_ALLOW_LIVE_CALLS` contract
+  exists and none was invented.
+- Immediately-before-Live protected hashes pass: approved-source aggregate
+  `9c228cd1a31952d0709738f3891a3d3e335afac1e20cb9c0bccea40dd893acf2` across 35 files; V2,
+  historical Recovery Manifest, parent Execution Manifest, original provider results, TASK-01,
+  TASK-02, LOCAL-TASK-03, Frame 92, and prompt v3 all match their authorized SHA values. No prior
+  Recovery V2 Live authorization record exists. Provider submissions/new task IDs/paid calls at
+  this checkpoint remain **0 / 0 / 0**.
+- Operational state: `READY_TO_EXECUTE_OWNER_AUTHORIZED_COFFEE_TABLE_RECOVERY_TASK04`.
+
+## Coffee Table Recovery V2 — TASK-04 completed, master ready for Owner review
+
+- Executed the exact Owner-authorized Recovery Manifest V2 once. New operation/run ID is
+  `LALA-VIDEO-20260821-131803-COFFEE-TABLE-RECOVERY-LIVE-001`; lifecycle evidence is exactly
+  `PREPARED → SUBMITTING → TASK_ID_DURABLE → SUBMITTED → SUCCEEDED → ASSEMBLING → READY_FOR_OWNER_REVIEW`.
+  New Provider submissions/tasks are **1 / 1**; automatic paid retries/replacements are **0 / 0**.
+- TASK-04 succeeded as Runway task `c480792c-a6ad-4d18-a68b-e47f1b3a1677`, using only zero-based
+  Frame 92 and prompt v3. Output is
+  `outputs/broll/LALA-VIDEO-20260821-131803-COFFEE-TABLE-RECOVERY-LIVE-001/TASK-04.mp4`, SHA
+  `a310a5ebcd66dad419febe9df18895aa30470b2dd4b3bf2a09d9a4287fa0b43d`, 1,794,569 bytes,
+  5.041667 seconds, 1280×720, 24 fps, H.264/yuv420p, silent. Actual new spend is 25 credits /
+  USD 0.25; actual completed total is 75 credits / USD 0.75.
+- Deterministic master is
+  `outputs/final/LALA-VIDEO-20260821-131803-COFFEE-TABLE-RECOVERY-LIVE-001/coffee-table-master-16x9.mp4`,
+  SHA `412311e5d96d6a9fd97a9a2c57b0b07e784fb13c2a9ea85a6f22a8ba24a027e8`, 6,096,843 bytes,
+  exactly 20.000 seconds / 480 frames, 1280×720, 24 fps, H.264/yuv420p, silent. The eight V2
+  intervals validate `PASS`. TASK-04 contains 121 decoded frames; the terminal hold source is exact
+  zero-based frame 120, PNG SHA
+  `9cb99c0fb9784968b92a1080eb91f86333a9db305e75a24661fafe1cfa41b7b8`.
+- 1:1 and 9:16 are both `BLOCKED_SAFE_AREA`: no objective Owner-approved subject/ROI contract can
+  prove the crops preserve Candidate 16, Coffee Table, wine glass, and interaction context. No
+  alternate-ratio file or native-ratio Provider task was created.
+- Final blank Human Review Package is
+  `outputs/reviews/coffee-table-final/LALA-VIDEO-20260821-131803-COFFEE-TABLE-RECOVERY-LIVE-001/`.
+  Package manifest SHA is `7701f0f78d28972ba6260562878f6ddf365ce42a7abd24768aba8cf07d6b13b1`;
+  review CSV SHA is `6d9520598e6053e68344c99f388979036dcbe6f71ea148c37b844627bd231594`.
+  All 25 Owner checklist rows have blank decision, notes, reviewer, and reviewed-at fields; all four
+  source videos and the 16:9 master copy hashes match their sources.
+- Post-execution verification: Coffee Table focused **47 passed in 42.40s** and final Recovery V2
+  focused **13 passed in 28.05s**; workflow/video validators passed with video `paid_calls: 0`;
+  compileall and `git diff --check` passed. After adding explicit invalid-output and
+  credential-redaction coverage, the final full offline suite passed **389 tests in 100.46s**.
+  Runtime exact-credential and signed-query scans returned zero matches.
+  Approved-source aggregate remains
+  `9c228cd1a31952d0709738f3891a3d3e335afac1e20cb9c0bccea40dd893acf2` across 35 files; Manifest V2,
+  historical Recovery Manifest, parent Execution Manifest, original provider results, TASK-01,
+  TASK-02, historical TASK-03 FAILED facts, LOCAL-TASK-03, Frame 92, and prompt v3 remain unchanged.
+- Integrity boundaries: no TASK-01 rerun, no TASK-02 rerun, no TASK-03 retry/reclassification, no
+  replacement TASK-04, no fifth Provider task, no native-ratio Provider generation, no history
+  rewrite, no automatic approval, and no promotion.
+- Terminal operational state: `READY_FOR_OWNER_REVIEW`.
+- Final Spec Kit convergence checked 33 functional requirements, 12 success criteria, 24
+  acceptance scenarios, 14 plan decisions, and all 5 Constitution principles. Findings by gap
+  type and severity are zero; no convergence tasks were appended.
+
+## Coffee Table V3 semantic recovery — Owner rejection recorded, planning only
+
+- Owner rejected the existing 16:9 master for `SOFA_SEATING_CONTRACT_VIOLATION`. The rejection is
+  semantic: the final TASK-04 result seats/perches Lady LaLa on the Coffee Table instead of the sofa.
+  It explicitly records that the wine glass, fireplace concept, Coffee Table product concept,
+  walking-from-fireplace, and wine-glass placement are not the root cause. Wine glass remains a
+  correct Henry source requirement.
+- The historical final package, master, TASK-01/02/04 MP4s, LOCAL-TASK-03, provider results,
+  parent/recovery manifests, provider task IDs, and historical 75 credits / USD 0.75 accounting were
+  read-only SHA-verified. The 35-file approved-source aggregate remains
+  `9c228cd1a31952d0709738f3891a3d3e335afac1e20cb9c0bccea40dd893acf2`.
+- Append-only V3 Owner decision evidence is under
+  `outputs/reviews/coffee-table-v3-owner-rejection/COFFEE-TABLE-V3-RECOVERY-20260821-221527-001/`;
+  `owner-decision.json` records `REJECT` and the sofa-seating reason while preserving the original
+  blank review CSV SHA as provenance.
+- The V3 source-frame package is under
+  `outputs/reviews/coffee-table-v3-source-frame-review/COFFEE-TABLE-V3-RECOVERY-20260821-221527-001/`.
+  It has exact TASK-02 frames 92, 96, 100, 104, 108, 112, and 116; selection remains blank.
+  Frames 96–108 are recommended low-ambiguity candidates; 112/116 are retained but flagged for
+  continuity risk. No source frame was selected automatically.
+- V3 manifest is
+  `outputs/campaign-v3-recovery-manifests/COFFEE-TABLE-V3-RECOVERY-20260821-221527-001/coffee-table-v3-recovery-manifest.json`,
+  SHA `cf23c5769b6cce88954ae29dd6b88c62c31e023c97c9d7b76008cee2665bb214`.
+  It marks TASK-01, TASK-02, and LOCAL-TASK-03 `REUSE_ELIGIBLE`, TASK-04 `REGEN_REQUIRED`, and
+  recommends `TASK-04 ONLY` at a future estimated 25 credits / USD 0.25. This preparation used
+  0 Provider calls, 0 paid calls, and an explicit maximum authorized 0 credits / USD 0.
+- The versioned `prompts/coffee-table-task-04-sofa-hero-v4.txt` requires walking around the table,
+  sofa-cushion support for hips/body weight, a foreground Coffee Table, wine glass on tabletop, and
+  fireplace background. It rejects every table-seating transformation. 1:1 and 9:16 remain
+  `BLOCKED_SAFE_AREA`; no crop or native-ratio regeneration was created.
+- Terminal operational state: `READY_FOR_OWNER_COFFEE_TABLE_V3_RECOVERY_REVIEW`. Do not submit a
+  replacement task until the Owner accepts the V3 contract, selects one candidate frame, accepts the
+  minimal scope, and explicitly authorizes the next paid Live call.
+- Verification: V3 focused plus affected provider/redaction regressions **27 passed in 5.52s**;
+  full offline suite **390 passed in 106.88s**. `lala_workflow validate`, `video validate`, and
+  character registry validation passed; the active character is `character-20260821-001` / Candidate
+  16. `compileall`, `git diff --check`, historical-media SHA verification, 35-file approved-source
+  aggregate verification, and static credential/signed-URL scanning passed. No Provider client,
+  network request, paid generation, retry, replacement, promotion, commit, push, PR, or merge ran.
+## Checkpoint — Coffee Table 20-second four-task dry-run redesign (2026-08-21)
+
+- Scope: translated Henry's confirmed story into four ordered five-second 16:9 task contracts and
+  an append-only Owner review package. No image/video generation or Provider construction occurred.
+- Storyboard: TASK-01 approaches from the fireplace and ends beside the table with one stemmed wine
+  glass in hand; TASK-02 places it and begins the sofa approach while remaining in frame; TASK-03 is
+  a same-room lifestyle Coffee Table beauty shot; TASK-04 ends with Lady LaLa's hips/body weight
+  visibly supported by the sofa and the Coffee Table/glass foreground with fireplace background.
+- Evidence: `specs/014-coffee-table-4task-redesign/`, four new versioned prompt files, and
+  `outputs/reviews/coffee-table-4task-dryrun/COFFEE-TABLE-4TASK-DRYRUN-20260821-001/`.
+- Dry-run manifest SHA-256: `2d879daa7a5a8980afb6b3f4a4fdaddba4ead828145212d6fab4acec63dfaf80`.
+  Owner review Markdown SHA-256: `3746f5db9272ae7ba37dd351a814b695e17c6484b33ff80be0256e74e76deca3`.
+  Blank review CSV SHA-256: `e37be4ff1689d696e5cc6b43c20efcfb775dab20a0763f5e8ff1c3e0dbaf58b8`.
+- Integrity: all 35 approved-source SHA-256 rows match byte-for-byte before and after this work.
+  Historical task/media evidence was not altered; historical accounting remains 75 credits / USD
+  0.75. This checkpoint made 0 HTTP requests, 0 Provider constructions/submissions/task IDs,
+  0 paid calls, 0 retries/replacements, 0 credits, and USD 0 cost.
+- Verification: manifest JSON parsed; exact task IDs/intervals/duration, prompt hashes, blank Owner
+  decisions, false Live authorization, and zero accounting passed offline assertions. Final diff,
+  secret scan, and package checksums are recorded at handoff.
+- Future strategy: TASK-01 Live → Owner review → TASK-02 Live → Owner review → TASK-03 Live → Owner
+  review → TASK-04 Live → Owner review → local assembly → final human review. No future Live action
+  is authorized by this package.
+- Terminal state: `READY_FOR_OWNER_4TASK_DRYRUN_REVIEW`.
+
+## Checkpoint — Coffee Table optimized four-task Runway prompts (2026-08-21)
+
+- Created append-only TASK-01 v3 / TASK-02 v3 / TASK-03 v4 / TASK-04 v6 prompt files; prior prompt
+  versions and the original four-task review package remain unchanged.
+- Separated detailed Owner storyboard, future Runway `promptText`, and QA acceptance gates in
+  `outputs/reviews/coffee-table-4task-prompt-review/COFFEE-TABLE-4TASK-PROMPT-20260821-001/`.
+- UTF-16 preflight: TASK-01 597, TASK-02 507, TASK-03 615, TASK-04 582; all pass target <=850 and
+  provider limit <=1000. TASK-02 is limited to place/release/turn/begin; TASK-03 ends clearly visible
+  beside sofa in a pre-sit state; TASK-04 starts from that exact accepted terminal frame.
+- Added local preflight/test coverage using the shared UTF-16 counter, including a non-BMP surrogate
+  pair case and >1000 rejection. Existing provider adapter and pre-provider runner hard gates remain.
+- Approved-source set remains 35 files with unchanged SHA-256 values. Historical provider evidence
+  and 75-credit/USD 0.75 accounting were not modified.
+- This checkpoint: Provider calls 0; network calls 0; paid calls 0; Runway credits 0; Live tasks 0;
+  retries/replacements 0. Terminal state: `READY_FOR_OWNER_OPTIMIZED_4TASK_PROMPT_REVIEW`.
+
+## Checkpoint — Coffee Table final TASK-03 continuity revision (2026-08-21)
+
+- Recorded Owner `APPROVE` for unchanged TASK-01 v3, TASK-02 v3, and TASK-04 v6. Created TASK-03 v5
+  without modifying v4; its primary source is the accepted exact TASK-02 terminal frame and it now
+  performs the full continuous walk to a clearly visible sofa-side pre-sit position.
+- Standardized Runway prompt normalization as identity: UTF-8 file text and its trailing newline are
+  preserved in `prompt_text`; `strip()` is used only for blank detection. Preflight and translated
+  provider payload therefore count the exact same string.
+- Final UTF-16 counts are TASK-01 598, TASK-02 508, TASK-03 623, TASK-04 583; all pass <=850 target
+  and <=1000 provider hard limit. An offline translation test proves preflight count equals payload
+  count and that the payload retains its trailing newline.
+- Final review evidence is append-only under
+  `outputs/reviews/coffee-table-4task-final-prompt-review/COFFEE-TABLE-4TASK-FINAL-PROMPT-20260821-001/`;
+  TASK-03 Owner decision remains blank.
+- Approved-source hashes remain unchanged. Provider/network/paid calls, Runway credits, Live tasks,
+  retries, and replacements are all zero. Terminal state:
+  `READY_FOR_OWNER_FINAL_4TASK_PROMPT_REVIEW`.
+
+## Checkpoint — Coffee Table TASK-01 bounded Live (2026-08-21)
+
+- Owner authorized exactly one TASK-01 `gen4_turbo` submission, five seconds, `1280:720`, prompt
+  `coffee-table-task-01-establish-approach-v3.txt`, maximum 25 credits, with no retry/replacement and
+  no TASK-02/03/04 authority.
+- Preflight verified final Owner package SHA `606b9eaf...`, review SHA `e4cc8662...`, package checksums,
+  prompt SHA/598 UTF-16 payload units, K1 provider input, K3 product authority, Candidate 16 semantic
+  profile digest, Live environment gate, and exact 25-credit budget.
+- Run `LALA-VIDEO-20260821-154747-COFFEE-TABLE-TASK01-LIVE-001` submitted exactly one provider task
+  `a1112b4f-f6ac-4b2c-8ca5-ba9f617bd9bd`, which succeeded. No second submission occurred.
+- Raw H.264 MP4: `outputs/broll/LALA-VIDEO-20260821-154747-COFFEE-TABLE-TASK01-LIVE-001/TASK-01.mp4`;
+  SHA-256 `189ed2b44d0819a11ca4cbb54f20674ee8fd32770d0854276f68033dc6d99a4e`,
+  1280x720, 5.041667 seconds, 24 fps, 121 frames, silent.
+- Review package: `outputs/reviews/coffee-table-task01-live/LALA-VIDEO-20260821-154747-COFFEE-TABLE-TASK01-LIVE-001/`;
+  manifest SHA-256 `1370726875680378cf336c2b442d0870dbaea469a72cc3666152f4c1cdf52cab`.
+  Five deterministic terminal candidates cover frames 112/114/116/118/120; every Owner decision and
+  Human QA field remains blank.
+- Actual accounting: 25 Runway credits / USD 0.25. Authorization remaining for generation is zero.
+  Provider submissions 1; automatic retries 0; replacements 0; TASK-02/03/04 submissions 0.
+- Approved-source hashes remain unchanged. Terminal state:
+  `READY_FOR_OWNER_TASK01_LIVE_REVIEW`.
+
+## Checkpoint — TASK-01 Human QA failure closure and v4 replacement plan (2026-08-22)
+
+- Recorded Owner decision `TASK01_LIVE_HUMAN_QA_FAILED` / `REJECTED_HUMAN_QA` for run
+  `LALA-VIDEO-20260821-154747-COFFEE-TABLE-TASK01-LIVE-001` without modifying its Provider task,
+  MP4, review frames, hashes, or 25-credit/USD 0.25 accounting.
+- Failure categories: character scale, Coffee Table relative scale, story-beat boundary, wine-glass
+  custody, and wine-glass duplication. Terminal-frame status is `NONE_APPROVED`; TASK-02 is
+  `LIVE_NOT_AUTHORIZED` and `BLOCKED_ON_ACCEPTED_TASK01_TERMINAL_FRAME`.
+- Added `prompts/coffee-table-task-01-establish-approach-v4.txt`, SHA-256
+  `c9a9d899128e89fc9c31c8aae32fffbbebe2fa62db43b8cd53d483d28bb1434c`, with 641 UTF-16 payload
+  units. It binds the 16.8-inch/42.7-cm knee-height scale and exact hand=1/tabletop=0 prop state.
+- Replacement planning evidence is append-only under
+  `outputs/reviews/coffee-table-task01-replacement-plan/COFFEE-TABLE-TASK01-REPLACEMENT-20260822-001/`.
+- New Provider submissions/paid calls/replacements and TASK-02/03/04 submissions are all zero.
+  Terminal state: `READY_FOR_OWNER_TASK01_REPLACEMENT_LIVE_AUTHORIZATION`.

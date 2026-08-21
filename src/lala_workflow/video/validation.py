@@ -62,6 +62,10 @@ def validate_approved_keyframe(
         return _validate_owner_supplied_external_promotion(
             keyframe_id, raw, project_root, relative, source, actual, info
         )
+    if provenance_type == "candidate16_review_package_promotion":
+        return _validate_candidate16_review_package_promotion(
+            keyframe_id, raw, project_root, relative, source, actual, info
+        )
     if provenance_type != "goal1_promotion":
         raise SourceValidationError(
             f"keyframe {keyframe_id} has unsupported provenance_type: {provenance_type}"
@@ -398,6 +402,129 @@ def _validate_owner_supplied_external_promotion(
         source_candidate_sha256=values["source_candidate_sha256"],
         source_reference=values["source_reference"],
         review_file_sha256=values["review_file_sha256"],
+        roles=roles,
+    )
+
+
+def _validate_candidate16_review_package_promotion(
+    keyframe_id: str,
+    raw: Mapping[str, Any],
+    project_root: Path,
+    relative: Path,
+    source: Path,
+    actual: str,
+    info: Any,
+) -> ApprovedKeyframe:
+    required = (
+        "promotion_record",
+        "source_candidate_id",
+        "source_candidate_sha256",
+        "source_manifest_sha256",
+        "review_file_sha256",
+        "character_id",
+        "character_profile_sha256",
+        "reviewer",
+        "approved_at",
+    )
+    values = {name: str(raw.get(name) or "").strip() for name in required}
+    missing = [name for name, value in values.items() if not value]
+    if missing:
+        raise SourceValidationError(
+            f"keyframe {keyframe_id} Candidate 16 promotion is missing: {', '.join(missing)}"
+        )
+    for field in (
+        "source_candidate_sha256",
+        "source_manifest_sha256",
+        "review_file_sha256",
+        "character_profile_sha256",
+    ):
+        if not HASH_RE.fullmatch(values[field].lower()):
+            raise SourceValidationError(
+                f"keyframe {keyframe_id} {field} must be 64 lowercase hex characters"
+            )
+    if values["source_candidate_id"] != keyframe_id or values["source_candidate_sha256"] != actual:
+        raise SourceValidationError(
+            f"keyframe {keyframe_id} Candidate 16 source candidate mismatch"
+        )
+    try:
+        approved_at = datetime.fromisoformat(values["approved_at"].replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise SourceValidationError(f"keyframe {keyframe_id} approved_at is invalid") from exc
+    if approved_at.tzinfo is None or approved_at.utcoffset() is None:
+        raise SourceValidationError(f"keyframe {keyframe_id} approved_at must include a timezone")
+    promotion_relative = Path(values["promotion_record"])
+    try:
+        promotion = assert_within_directory(
+            project_root / promotion_relative,
+            project_root / "assets/approved_keyframes",
+        )
+    except ValueError as exc:
+        raise SourceValidationError(
+            f"keyframe {keyframe_id} promotion record must remain with approved keyframes"
+        ) from exc
+    if not promotion.is_file():
+        raise SourceValidationError(f"keyframe {keyframe_id} promotion record does not exist")
+    try:
+        payload = json.loads(promotion.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise SourceValidationError(
+            f"keyframe {keyframe_id} promotion record is invalid JSON"
+        ) from exc
+    if not isinstance(payload, dict):
+        raise SourceValidationError(f"keyframe {keyframe_id} promotion record must be an object")
+    roles = _roles(raw)
+    role_map = {
+        ("pilot_home_context", "establishing_keyframe"): "pilot_home_context",
+        ("talking_medium_closeup",): "pilot_talking_medium_closeup",
+        ("pilot_product_present",): "pilot_product_present",
+    }
+    formal_role = role_map.get(roles)
+    if formal_role is None:
+        raise SourceValidationError(f"keyframe {keyframe_id} Candidate 16 roles are invalid")
+    expected = {
+        "schema_version": "candidate16-reviewed-keyframe-promotion/v1",
+        "provenance_type": "candidate16_review_package_promotion",
+        "candidate_id": keyframe_id,
+        "formal_role": formal_role,
+        "character_id": values["character_id"],
+        "character_profile_sha256": values["character_profile_sha256"],
+        "source_manifest_sha256": values["source_manifest_sha256"],
+        "source_review_sha256": values["review_file_sha256"],
+        "staged_sha256": actual,
+        "reviewer": values["reviewer"],
+        "approved_at": values["approved_at"],
+        "approved_path": relative.as_posix(),
+        "approved_sha256": actual,
+    }
+    mismatches = [
+        name
+        for name, expected_value in expected.items()
+        if str(payload.get(name) or "") != expected_value
+    ]
+    if list(payload.get("roles") or []) != list(roles):
+        mismatches.append("roles")
+    if mismatches:
+        raise SourceValidationError(
+            f"keyframe {keyframe_id} Candidate 16 promotion provenance mismatch: "
+            + ", ".join(mismatches)
+        )
+    return ApprovedKeyframe(
+        keyframe_id=keyframe_id,
+        path=source.relative_to(project_root.resolve()),
+        sha256=actual,
+        mime_type=info.mime_type,
+        width=info.width,
+        height=info.height,
+        provenance_type="candidate16_review_package_promotion",
+        provenance_record=promotion.relative_to(project_root.resolve()),
+        reviewer=values["reviewer"],
+        approved_at=approved_at.isoformat(),
+        source_candidate_id=values["source_candidate_id"],
+        source_candidate_sha256=values["source_candidate_sha256"],
+        review_file_sha256=values["review_file_sha256"],
+        character_id=values["character_id"],
+        character_profile_sha256=values["character_profile_sha256"],
+        formal_role=formal_role,
         roles=roles,
     )
 

@@ -13,6 +13,9 @@ from lala_workflow.video.domain import VideoTaskStatus
 from tests.test_runway_motion_provider import ImageToVideo, make_motion_request
 
 
+SYNTHETIC_SIGNED_VIDEO_URL = "https://example.test/video.mp4?" + "signature=secret"
+
+
 def test_runway_tracks_submit_estimate_and_terminal_actual_credits(
     video_project_root: Path,
 ) -> None:
@@ -21,7 +24,7 @@ def test_runway_tracks_submit_estimate_and_terminal_actual_credits(
             assert task_id == "motion-task-1"
             return SimpleNamespace(
                 status="SUCCEEDED",
-                output=["https://example.test/video.mp4?signature=secret"],
+                output=[SYNTHETIC_SIGNED_VIDEO_URL],
                 cost=SimpleNamespace(credits=19.5),
             )
 

@@ -173,6 +173,12 @@ def _record(context):
     return storage.load_motion_operation(profile.character_id, fingerprint)
 
 
+def _override_record(context):
+    profile, _build, static, request, storage, *_rest = context
+    fingerprint = motion_request_fingerprint(profile, static, request)
+    return storage.load_motion_override_operation(profile.character_id, fingerprint)
+
+
 def _execute(context, provider, **kwargs):
     profile, _build, static, request, _storage, executor, destination, _video = context
     return executor.execute(
@@ -261,6 +267,74 @@ def test_interrupted_submitting_state_becomes_unknown_and_blocks(recovery_contex
     assert _record(recovery_context).state is MotionOperationState.SUBMISSION_UNKNOWN
 
 
+def test_owner_risk_override_preserves_legacy_and_submits_exactly_once(
+    recovery_context,
+) -> None:
+    initial = FakeProvider(recovery_context[-1])
+    with pytest.raises(PreviewUnavailableError):
+        _execute(recovery_context, initial, legacy_submission_unknown=True)
+    legacy_path = recovery_context[4].motion_operation_path(
+        recovery_context[0].character_id,
+        _record(recovery_context).request_fingerprint,
+    )
+    legacy_bytes = legacy_path.read_bytes()
+    provider = FakeProvider(recovery_context[-1])
+    result = _execute(recovery_context, provider, owner_risk_override=True)
+    override = _override_record(recovery_context)
+    assert result.operation.state is MotionOperationState.SUCCEEDED
+    assert provider.submit_count == 1
+    assert legacy_path.read_bytes() == legacy_bytes
+    assert _record(recovery_context).state is MotionOperationState.SUBMISSION_UNKNOWN
+    assert override.owner_risk_override is True
+    assert override.owner_risk_override_max_new_submissions == 1
+    assert override.owner_risk_override_max_new_credits == 25
+    assert override.owner_risk_override_max_new_usd == 0.25
+    assert override.owner_risk_override_automatic_retries == 0
+    assert override.legacy_submission_state == "SUBMISSION_STATE_UNKNOWN"
+
+
+def test_ambiguous_owner_override_cannot_submit_again(recovery_context) -> None:
+    with pytest.raises(PreviewUnavailableError):
+        _execute(
+            recovery_context,
+            FakeProvider(recovery_context[-1]),
+            legacy_submission_unknown=True,
+        )
+    first = FakeProvider(recovery_context[-1], submit_error=HttpError(503))
+    with pytest.raises(PreviewUnavailableError):
+        _execute(recovery_context, first, owner_risk_override=True)
+    second = FakeProvider(recovery_context[-1])
+    with pytest.raises(PreviewUnavailableError, match="duplicate paid submission"):
+        _execute(recovery_context, second, owner_risk_override=True)
+    assert first.submit_count == 1
+    assert second.submit_count == 0
+    assert _override_record(recovery_context).state is MotionOperationState.SUBMISSION_UNKNOWN
+
+
+def test_failed_owner_override_exhausts_one_submission_cap(recovery_context) -> None:
+    with pytest.raises(PreviewUnavailableError):
+        _execute(
+            recovery_context,
+            FakeProvider(recovery_context[-1]),
+            legacy_submission_unknown=True,
+        )
+    failed = FakeProvider(recovery_context[-1], result_status=VideoTaskStatus.FAILED)
+    with pytest.raises(PreviewUnavailableError, match="terminal failure"):
+        _execute(recovery_context, failed, owner_risk_override=True)
+    retry = FakeProvider(recovery_context[-1])
+    with pytest.raises(PreviewUnavailableError, match="cap is exhausted"):
+        _execute(recovery_context, retry, owner_risk_override=True)
+    assert failed.submit_count == 1
+    assert retry.submit_count == 0
+
+
+def test_request_fingerprint_is_deterministic(recovery_context) -> None:
+    profile, _build, static, request, *_rest = recovery_context
+    first = motion_request_fingerprint(profile, static, request)
+    second = motion_request_fingerprint(profile, static, replace(request, request_id="different"))
+    assert first == second
+
+
 @pytest.mark.parametrize(
     ("status", "expected"),
     [(400, MotionOperationState.PROVIDER_REJECTED), (503, MotionOperationState.SUBMISSION_UNKNOWN)],
@@ -291,6 +365,7 @@ def test_download_failure_preserves_successful_task(recovery_context) -> None:
     assert record.provider_task_id == "motion-task-1"
     assert record.last_status == "SUCCEEDED"
     assert record.provider_output_urls
+    assert all("?" not in url for url in record.provider_output_urls)
 
 
 def test_automatic_paid_retry_is_disabled(recovery_context) -> None:

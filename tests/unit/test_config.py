@@ -17,6 +17,9 @@ def test_load_project_config_maps_required_anchors_and_presets() -> None:
     assert set(config.presets) == {
         "baseline_identity",
         "home_decor",
+        "pilot_home_keyframe",
+        "pilot_product_keyframe",
+        "pilot_talking_keyframe",
         "product_page_clean",
     }
     assert config.presets["baseline_identity"].default_count == 10

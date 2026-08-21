@@ -1,16 +1,25 @@
-revision: 0
-active_character: lala-v1
-previous_active_character: null
+revision: 5
+active_character: character-20260821-001
+previous_active_character: lala-v1
 characters:
   lala-v1:
     character_id: lala-v1
     display_name: Lady LaLa (Legacy)
+    status: INACTIVE
+    profile: configs/characters/profiles/lala-v1-v002.yaml
+    profile_sha256: 9bb38c9badd1f084aef6c0a52eb6b99e510751d7af8ce882f099d57db9904d18
+    updated_at: '2026-08-21T05:00:22.813027+00:00'
+  character-20260821-001:
+    character_id: character-20260821-001
+    display_name: Candidate 16
     status: ACTIVE
-    profile: configs/characters/profiles/lala-v1-v001.yaml
-    profile_sha256: 73c9367ece7834ede7123d42a2659f6bad3b54dfe39f4225c0a01f4d43f4f388
-    updated_at: '2026-08-20T00:00:00+08:00'
+    profile: configs/characters/profiles/character-20260821-001-v006.yaml
+    profile_sha256: 659378036a36b44f69b2e5bb4312d1a62446da36b30f52eaf67e1337cfaa434b
+    updated_at: '2026-08-21T05:00:22.813027+00:00'
 last_event:
-  type: legacy_bootstrap
-  character_id: lala-v1
-  at: '2026-08-20T00:00:00+08:00'
+  type: approved_and_activated
+  character_id: character-20260821-001
+  previous_active_character: lala-v1
+  profile_sha256: 659378036a36b44f69b2e5bb4312d1a62446da36b30f52eaf67e1337cfaa434b
+  at: '2026-08-21T05:00:22.813027+00:00'
 registry_version: '1.0'

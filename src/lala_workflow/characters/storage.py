@@ -119,6 +119,13 @@ class CharacterStorage:
     def motion_operation_path(self, character_id: str, request_fingerprint: str) -> Path:
         return self.outputs_root / character_id / "operations" / f"motion-{request_fingerprint}.json"
 
+    def motion_override_operation_path(
+        self, character_id: str, request_fingerprint: str
+    ) -> Path:
+        return self.outputs_root / character_id / "operations" / (
+            f"motion-{request_fingerprint}-owner-risk-override-001.json"
+        )
+
     def load_motion_operation(
         self, character_id: str, request_fingerprint: str
     ) -> MotionOperationRecord | None:
@@ -136,8 +143,33 @@ class CharacterStorage:
             raise CharacterIntegrityError("motion operation identity mismatch")
         return record
 
+    def load_motion_override_operation(
+        self, character_id: str, request_fingerprint: str
+    ) -> MotionOperationRecord | None:
+        path = self.motion_override_operation_path(character_id, request_fingerprint)
+        if not path.is_file():
+            return None
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise CharacterIntegrityError("motion override operation state is unreadable") from exc
+        if not isinstance(raw, Mapping):
+            raise CharacterIntegrityError("motion override operation state must be an object")
+        record = MotionOperationRecord.from_dict(raw)
+        if (
+            not record.owner_risk_override
+            or record.character_id != character_id
+            or record.request_fingerprint != request_fingerprint
+        ):
+            raise CharacterIntegrityError("motion override operation identity mismatch")
+        return record
+
     def write_motion_operation(self, record: MotionOperationRecord) -> Path:
-        path = self.motion_operation_path(record.character_id, record.request_fingerprint)
+        path = (
+            self.motion_override_operation_path(record.character_id, record.request_fingerprint)
+            if record.owner_risk_override
+            else self.motion_operation_path(record.character_id, record.request_fingerprint)
+        )
         payload = sanitize(to_primitive(record), self.secrets)
         self._atomic_replace_text(
             path, json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True) + "\n"

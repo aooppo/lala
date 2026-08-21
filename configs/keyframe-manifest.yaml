@@ -4,8 +4,8 @@ keyframe_set_version: owner-supplied-v1.0.0
 keyframes:
   pilot_home_context:
     roles:
-      - pilot_home_context
-      - establishing_keyframe
+    - pilot_home_context
+    - establishing_keyframe
     path: assets/approved_keyframes/lady-lala-home-context-v0.7.png
     sha256: ab53d9d0551bcf926a41072567493cf640815d99ff92503d9bc111ec3ce7b9ca
     provenance_type: owner_supplied_legacy_asset
@@ -14,3 +14,49 @@ keyframes:
     source_package_sha256: ecb747c66aca39e78de9718439a81c2bff603b3d1992259a43384327071f5282
     source_path: 01_keyframe/video_keyframe_candidate/lady-lala-home-context-v0.7.png
     owner_approval_reference: current task user request, section 一.2 Goal 2 视频 Keyframe
+  K1-V2-002:
+    roles:
+    - pilot_home_context
+    - establishing_keyframe
+    path: assets/approved_keyframes/K1-V2-002.png
+    sha256: 3ad624df44cc31f56309a45ae4ba9577d526693a7332ee97fb7fd9f914a7043c
+    provenance_type: candidate16_review_package_promotion
+    promotion_record: assets/approved_keyframes/K1-V2-002.promotion.json
+    character_id: character-20260821-001
+    character_profile_sha256: 659378036a36b44f69b2e5bb4312d1a62446da36b30f52eaf67e1337cfaa434b
+    source_candidate_id: K1-V2-002
+    source_candidate_sha256: 3ad624df44cc31f56309a45ae4ba9577d526693a7332ee97fb7fd9f914a7043c
+    source_manifest_sha256: 979f4990141d5a734056b8b891bfd27d14f58287dea4eadae223ee041f5444be
+    review_file_sha256: e083676c75933f550fb81bbad5b897265847e46cd4406e674961ee4b44cf873d
+    reviewer: Project owner (explicit human decision)
+    approved_at: '2026-08-21T14:26:24+08:00'
+  K2-002:
+    roles:
+    - talking_medium_closeup
+    path: assets/approved_keyframes/K2-002.png
+    sha256: 78478b171552472227772f5efc092380b69da6b698cc13182880967e3a26bd59
+    provenance_type: candidate16_review_package_promotion
+    promotion_record: assets/approved_keyframes/K2-002.promotion.json
+    character_id: character-20260821-001
+    character_profile_sha256: 659378036a36b44f69b2e5bb4312d1a62446da36b30f52eaf67e1337cfaa434b
+    source_candidate_id: K2-002
+    source_candidate_sha256: 78478b171552472227772f5efc092380b69da6b698cc13182880967e3a26bd59
+    source_manifest_sha256: 979f4990141d5a734056b8b891bfd27d14f58287dea4eadae223ee041f5444be
+    review_file_sha256: e083676c75933f550fb81bbad5b897265847e46cd4406e674961ee4b44cf873d
+    reviewer: Project owner (explicit human decision)
+    approved_at: '2026-08-21T14:26:24+08:00'
+  K3-V2-002:
+    roles:
+    - pilot_product_present
+    path: assets/approved_keyframes/K3-V2-002.png
+    sha256: 7281237344ddfc81b7f4635a83410d87b109688b03be4188f648f20dff6fd631
+    provenance_type: candidate16_review_package_promotion
+    promotion_record: assets/approved_keyframes/K3-V2-002.promotion.json
+    character_id: character-20260821-001
+    character_profile_sha256: 659378036a36b44f69b2e5bb4312d1a62446da36b30f52eaf67e1337cfaa434b
+    source_candidate_id: K3-V2-002
+    source_candidate_sha256: 7281237344ddfc81b7f4635a83410d87b109688b03be4188f648f20dff6fd631
+    source_manifest_sha256: 979f4990141d5a734056b8b891bfd27d14f58287dea4eadae223ee041f5444be
+    review_file_sha256: e083676c75933f550fb81bbad5b897265847e46cd4406e674961ee4b44cf873d
+    reviewer: Project owner (explicit human decision)
+    approved_at: '2026-08-21T14:26:24+08:00'

@@ -14,7 +14,7 @@ from ..video.domain import (
     VideoTaskStatus,
 )
 from ..video.downloads import Downloader, download_video
-from ..video.prompts import utf16_code_units
+from ..video.prompts import normalize_runway_prompt_text, utf16_code_units
 from .base import ProviderSubmissionError, ProviderTaskError, ProviderValidationError
 
 
@@ -61,6 +61,7 @@ class RunwayMotionProvider:
         self.task_created_sink = sink
 
     def validate_request(self, request: MotionVideoRequest) -> None:
+        prompt_text = normalize_runway_prompt_text(request.prompt_text)
         if request.provider != "runway":
             raise ProviderValidationError("Runway motion request provider must be runway")
         models = self.settings.get("supported_models")
@@ -73,14 +74,14 @@ class RunwayMotionProvider:
             raise ProviderValidationError(
                 f"unsupported Runway motion duration: {request.duration_seconds}"
             )
-        if model.get("prompt_required") is True and not request.prompt_text.strip():
+        if model.get("prompt_required") is True and not prompt_text.strip():
             raise ProviderValidationError(f"Runway model {request.model} requires a prompt")
         prompt_limit = int(
             model.get("prompt_utf16_max")
             or self.settings.get("prompt_utf16_max")
             or 1000
         )
-        prompt_units = utf16_code_units(request.prompt_text)
+        prompt_units = utf16_code_units(prompt_text)
         if prompt_units > prompt_limit:
             raise ProviderValidationError(
                 "Runway motion prompt exceeds the UTF-16 character limit "
@@ -97,6 +98,7 @@ class RunwayMotionProvider:
 
     def translate_request(self, request: MotionVideoRequest) -> dict[str, Any]:
         self.validate_request(request)
+        prompt_text = normalize_runway_prompt_text(request.prompt_text)
         mime_type = "image/png" if request.image_path.suffix.lower() == ".png" else "image/jpeg"
         models = self.settings.get("supported_models")
         model = models.get(request.model) if isinstance(models, dict) else {}
@@ -110,8 +112,8 @@ class RunwayMotionProvider:
         # The current SDK/API treats prompt_text as optional for gen4_turbo;
         # sending an empty field changes validation semantics, so include it
         # only when the model/request actually has text.
-        if request.prompt_text.strip():
-            payload["prompt_text"] = request.prompt_text
+        if prompt_text.strip():
+            payload["prompt_text"] = prompt_text
         if request.seed is not None:
             payload["seed"] = request.seed
         return payload

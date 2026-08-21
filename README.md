@@ -88,6 +88,12 @@ is polled instead of resubmitted; a completed artifact is reused; and ambiguous 
 returns `BLOCKED_SUBMISSION_UNKNOWN`. Provider SDK retries and automatic paid replacement
 submissions remain disabled. The command never invokes static generation.
 
+An exceptional `--owner-risk-override` is accepted only when the canonical operation remains
+`SUBMISSION_UNKNOWN`. It preserves that legacy record and creates a separate audited
+`owner-risk-override-001` operation capped at one new five-second `gen4_turbo` submission, 25
+credits, USD 0.25, and zero automatic retries. Repeating the command resumes/reuses that override
+operation; it can never create a second override submission.
+
 After visually reviewing both preview-only artifacts:
 
 ```bash
@@ -524,6 +530,31 @@ timezone-aware review time. K2 is talking authority only; K1 remains motion/V7 a
 real candidate is staged at `READY_FOR_K2_HUMAN_REVIEW`; it is not approved and Product Page remains
 blocked until the Owner supplies a complete reviewed copy and explicitly runs promotion.
 
+Candidate-bound cutover generation also defines three unapproved static roles: K1
+`pilot_home_context`, K2 `pilot_talking_medium_closeup`, and K3 `pilot_product_present`. Their
+versioned presets are `pilot_home_keyframe`, `pilot_talking_keyframe`, and
+`pilot_product_keyframe`; each defaults to three candidates and resolves references from the exact
+active character profile. Generated files and blank QA remain staging evidence. Human review does
+not itself promote media, build or publish a keyframe set, or rebind Goal 2.
+
+K1 and K3 can additionally use explicit local PDP references through the role-aware three-slot
+planner. K1 resolves `character face + character full body + scene/product reference`; K3 resolves
+`character face + scene/product reference + product-only reference`. The local inputs must be
+regular, non-symlink PNG/JPEG/WebP files inside the project, and both a clean HTTPS source URL and
+SKU are required as provenance. The planner hashes and decodes every input, records slot order,
+semantic role, path, dimensions, SHA-256, source type, URL, and SKU in run evidence, and fails before
+run allocation if a required reference is missing, duplicated, unsafe, or exceeds the provider's
+three-reference limit. Example zero-call inspection:
+
+```bash
+uv run python -m lala_workflow generate \
+  --preset pilot_product_keyframe --count 3 --character character-20260821-001 \
+  --scene-reference tmp/candidate16-henry-pdp/01-hero.jpg \
+  --product-reference tmp/candidate16-henry-pdp/02.jpg \
+  --reference-source-url https://decorolala.com/products/in3725 \
+  --reference-sku IN3725 --retries 0 --dry-run
+```
+
 After human review, copy the assembly run’s blank `review.csv` to `outputs/reviews/`, then set
 `mtl_review_ready`, `reviewer`, and timezone-aware `reviewed_at` in the one matching row of that
 copy. Promote with the reviewed copy as an explicit immutable input:
@@ -819,3 +850,167 @@ so the suite makes zero generation and paid calls.
   A failed download is bounded and recorded.
 - **Promotion rejected**: verify `video_keyframe_ready`, reviewer, timezone-aware `reviewed_at`,
   source file existence, and unchanged source hash.
+
+## Candidate 16 published keyframe authority
+
+The role-complete Candidate 16 workflow now validates the seven-row V2 review, exact-byte promotes
+one Owner selection per K1/K2/K3 role, builds and publishes an immutable keyframe set, and records a
+revisioned Goal 2 binding. Use `video keyframe validate-review-package`, `video keyframe
+promote-reviewed`, and the `video keyframe-set build|publish|bind-goal2|preflight` commands. Existing
+Lady LaLa keyframes remain historical rather than current Candidate 16 authority.
+
+Legacy V7 media remains character-bound to old K1 SHA `ab53d9d…` and is never transferred. The
+separately executed Candidate 16 V7 evidence is bound to current K1 SHA `3ad624df…`; its explicit
+Owner review selects `v7-b-natural-micro-motion`. Register that external review offline with:
+
+```bash
+uv run python -m lala_workflow video motion-v7-register-review \
+  --package outputs/reviews/candidate16-v7
+uv run python -m lala_workflow video keyframe-set preflight
+```
+
+Registration revalidates the A-success parent plus B/C-success recovery, all three task/media/prompt
+hashes, the Candidate 16 keyframe, blank append-only run reviews, and the unique human winner. Goal 2
+then returns `GOAL2_READY`. The dedicated `video campaign coffee-table --dry-run` planner is
+motion-only, plans a 16:9 safe master plus guarded 1:1 and 9:16 delivery, and embeds the V7-B binding.
+Its exact recommended non-executed plan is four sequential five-second Runway `gen4_turbo` tasks,
+20 generated seconds, at most 100 credits / USD 1.00, concurrency one, and zero automatic
+replacement tasks. The command has no live mode and stops at
+`READY_FOR_COFFEE_TABLE_LIVE_AUTHORIZATION`; talking, dialogue, TTS, lip sync, and Coffee Table paid
+Live remain unexecuted.
+
+The approved dry-run plan is business authority, not a replayable request contract. Prepare the
+separate zero-call execution manifest with the exact parent identity:
+
+```bash
+uv run python -m lala_workflow video campaign coffee-table \
+  --prepare-execution-manifest \
+  --parent-plan outputs/campaign-previews/COFFEE-TABLE-DRY-20260821-071433-640204/plan.json \
+  --parent-plan-sha256 ed30e4984dd488cde79188e7e327bc4472ab0c331125a0c600d739a0d388ac5f \
+  --confirm-owner-authorized-manifest-preparation
+```
+
+Preparation validates the current Candidate 16 Goal 2/V7/K1/K2/K3 authority and the V1 Owner
+rejection. V2 freezes Task 01 from K1, Task 02 from K3, product-only Task 03 from PDP `02.jpg`,
+and Task 04 from Task 02's deterministically extracted `LAST_VALID_FRAME`, including runtime hash
+gates, versioned prompt hashes, the unchanged six-beat assembly map, Task 03 trimming, and a
+two-second local hold of Task 04's last valid frame. It constructs no provider and stops at
+`READY_FOR_OWNER_COFFEE_TABLE_EXECUTION_MANIFEST_REVIEW`. The returned execution-manifest SHA must
+receive a later explicit Owner approval before any Live entry may consume it.
+
+After the Owner approves that exact SHA, the bounded Live entry requires every authorization and
+budget flag and consumes no alternate plan:
+
+```bash
+VIDEO_ALLOW_LIVE_CALLS=true uv run python -m lala_workflow video campaign coffee-table \
+  --live \
+  --execution-manifest outputs/campaign-execution-manifests/COFFEE-TABLE-EXEC-20260821-075922-716655/execution-manifest-v2.json \
+  --execution-manifest-sha256 ce3f280164907aba6468a72c9e3b19a15a77cc8b9db374f4729928b0e1defdea \
+  --confirm-owner-authorized-live \
+  --max-runway-credits 100 \
+  --max-provider-cost-usd 1.00
+```
+
+The executor persists each task ID before continuation, stops on any failure or ambiguous
+submission, derives Task 04 only from Task 02's deterministic last decoded frame, performs only
+local 16:9/1:1/9:16 delivery, and can finish only at `READY_FOR_OWNER_REVIEW` with blank Human QA.
+
+If the exact run above stops after the real Task 03 provider failure, prepare the Owner-specified
+offline recovery contract with:
+
+```bash
+uv run python -m lala_workflow video campaign coffee-table \
+  --prepare-recovery \
+  --execution-manifest outputs/campaign-execution-manifests/COFFEE-TABLE-EXEC-20260821-075922-716655/execution-manifest-v2.json \
+  --execution-manifest-sha256 ce3f280164907aba6468a72c9e3b19a15a77cc8b9db374f4729928b0e1defdea \
+  --failed-live-run LALA-VIDEO-20260821-082100-COFFEE-TABLE-LIVE-001
+```
+
+Recovery reuses immutable Task 01/02 results, preserves Task 03 as the real failed provider task,
+creates a three-second deterministic local product cutaway, extracts only Task 02 zero-based frame
+96 for the proposed Task 04, freezes the v3 sit/hero prompt, and records the exact twenty-second
+timeline and 50/75-credit actual/projected budget. It exposes no Live path, constructs no provider,
+and stops at `READY_FOR_OWNER_COFFEE_TABLE_RECOVERY_REVIEW`. Task 04 remains unsubmitted until the
+Owner separately authorizes the returned recovery-manifest SHA.
+
+The later Owner-selected Frame 92 contract is append-only Recovery Manifest V2. Its dedicated Live
+continuation is deliberately separate from the historical four-task executor and requires both
+`--live` and `--recovery-live`:
+
+```bash
+VIDEO_ALLOW_LIVE_CALLS=true uv run python -m lala_workflow video campaign coffee-table \
+  --live \
+  --recovery-live \
+  --execution-manifest outputs/campaign-recovery-manifests/COFFEE-TABLE-RECOVERY-20260821-204901-001/coffee-table-recovery-manifest-v2.json \
+  --execution-manifest-sha256 e97ea0d34f4ea541ab07e6898083e7a35c3b82502030f8f40a06d58fb43e6cc3 \
+  --confirm-owner-authorized-live \
+  --max-runway-credits 25 \
+  --max-provider-cost-usd 0.25
+```
+
+The V2 executor rehashes the manifest and every transitive protected input before provider
+construction, submits only Task 04 from zero-based Frame 92 and prompt v3, fsyncs the provider task
+ID as the idempotency boundary, and uses zero submission/download retries or replacement tasks. A
+successful result is assembled locally into the exact eight-segment, 480-frame, twenty-second
+16:9 master; the final two seconds use an explicitly extracted last decoded Task 04 frame. Because
+V2 contains no Owner-approved objective safe-area geometry, 1:1 and 9:16 fail closed as
+`BLOCKED_SAFE_AREA` instead of receiving guessed center crops or native provider regeneration. The
+review package copies all four source videos and the master, records evidence/costs, leaves every
+Owner checklist field blank, and stops at `READY_FOR_OWNER_REVIEW` without approval or promotion.
+
+If Owner review rejects that delivered master for a semantic error, prepare the separate V3 recovery
+review package without a Provider call:
+
+```bash
+uv run python -m lala_workflow video campaign coffee-table --prepare-v3-recovery
+```
+
+V3 preserves the historical master and blank review package byte-for-byte, records the explicit
+Owner decision in a new reviewed-copy package, and keeps `wine glass` as a correct Henry requirement.
+It extracts seven post-placement TASK-02 source candidates with blank Owner selection, drafts the
+v4 sofa-seating prompt, and permits no Live generation, retry, replacement, promotion, crop, or
+native-ratio regeneration. The V3 manifest can recommend `TASK-04 ONLY` only after protected-input
+validation; its current-run provider/paid counts and authorized credits are all zero. It stops at
+`READY_FOR_OWNER_COFFEE_TABLE_V3_RECOVERY_REVIEW` pending a frame choice, recovery-scope acceptance,
+and a separate paid Live authorization.
+
+### Coffee Table four-task redesign (dry-run review only)
+
+The latest Henry-aligned plan is an append-only 20-second, 16:9 package with four exact five-second
+tasks: fireplace approach, wine-glass placement and sofa turn, a same-room lifestyle product beauty
+shot, and a final sofa-supported hero shot. Each task records its prompt, reference hierarchy,
+terminal/start continuity contract, hard negatives, acceptance gates, composition, risks, and blank
+Owner checklist. TASK-03 explicitly rejects a white-background/isolated PDP, and TASK-04 requires
+Lady LaLa's hips and body weight to be visibly supported by the sofa while the Coffee Table remains
+separate in the foreground.
+
+Review `outputs/reviews/coffee-table-4task-dryrun/COFFEE-TABLE-4TASK-DRYRUN-20260821-001/REVIEW.md`
+and `manifest.json`. This package makes and authorizes zero Provider calls, retries, replacements,
+credits, or cost; it preserves historical 75-credit/USD 0.75 accounting and stops exactly at
+`READY_FOR_OWNER_4TASK_DRYRUN_REVIEW`. Any future Live work must proceed one task at a time with an
+Owner review and separately hash-bound authorization before each next task.
+
+The optimized prompt review is append-only under
+`outputs/reviews/coffee-table-4task-prompt-review/COFFEE-TABLE-4TASK-PROMPT-20260821-001/`.
+It separates the detailed Owner storyboard, concise Runway `promptText`, and QA acceptance gates.
+The final prompt versions are TASK-01 v3, TASK-02 v3, TASK-03 v4, and TASK-04 v6; their real UTF-16
+lengths are 597/507/615/582 units, all below the project target of 850 and provider hard limit of
+1000. The local preflight reuses the repository UTF-16 counter, while the provider adapter and
+pre-provider runner retain independent hard-limit enforcement. This package stops at
+`READY_FOR_OWNER_OPTIMIZED_4TASK_PROMPT_REVIEW` and grants no Live authority.
+
+The final TASK-03 continuity revision is preserved as v5 and reviewed separately under
+`outputs/reviews/coffee-table-4task-final-prompt-review/COFFEE-TABLE-4TASK-FINAL-PROMPT-20260821-001/`.
+TASK-01 v3, TASK-02 v3, and TASK-04 v6 carry the Owner's explicit prompt approval; TASK-03 v5
+remains the sole pending prompt decision. Its primary source is the accepted exact TASK-02 terminal
+frame, and it carries the character continuously to a clearly visible sofa-side pre-sit position.
+Prompt files are sent unchanged: the trailing newline is preserved, and both local preflight and
+Runway payload validation count that exact string. Final UTF-16 units are 598/508/623/583. The
+package stops at `READY_FOR_OWNER_FINAL_4TASK_PROMPT_REVIEW` with no Live authority.
+
+The first bounded TASK-01 Live result is now explicitly `REJECTED_HUMAN_QA`; none of its terminal
+frames is an approved TASK-02 source. Its immutable failure closure and zero-call replacement plan
+are under `outputs/reviews/coffee-table-task01-replacement-plan/COFFEE-TABLE-TASK01-REPLACEMENT-20260822-001/`.
+TASK-01 v4 fixes scale authority to a 32 x 16.8 x 20 inch Coffee Table, preserves exactly one glass
+in hand and zero on the tabletop, and ends standing beside the table without placement language.
+It is 641 UTF-16 payload units and grants no replacement Live authority. TASK-02 remains blocked.

@@ -1812,6 +1812,555 @@ def run_motion_v7_live(
     )
 
 
+CANDIDATE16_V7_KEYFRAME_ID = "K1-V2-002"
+CANDIDATE16_V7_KEYFRAME_SHA256 = (
+    "3ad624df44cc31f56309a45ae4ba9577d526693a7332ee97fb7fd9f914a7043c"
+)
+
+
+def recover_motion_v7_live(
+    project_root: Path,
+    *,
+    parent_run_id: str,
+    execute_live: bool,
+    confirm_missing_bc: bool,
+    max_runway_credits: float | None,
+    provider: Any | None = None,
+    environ: Mapping[str, str] | None = None,
+) -> VideoRunOutcome:
+    """Submit only B/C for the exact Candidate 16 V7 A-success partial state."""
+
+    environment = os.environ if environ is None else environ
+    if not execute_live:
+        raise ExternalInputBlocked("motion-v7-recover requires explicit --execute-live")
+    if not confirm_missing_bc:
+        raise ExternalInputBlocked(
+            "motion-v7-recover requires explicit --confirm-missing-bc"
+        )
+    if max_runway_credits != 50:
+        raise ExternalInputBlocked(
+            "motion-v7-recover requires an exact --max-runway-credits 50 cap"
+        )
+    validate_live_provider_guard("runway", environment)
+
+    config = load_video_config(project_root, require_inputs=False)
+    if config.limits.max_concurrency != 1:
+        raise VideoConfigError("V7 recovery requires configured concurrency one")
+    keyframe = _keyframe(config, CANDIDATE16_V7_KEYFRAME_ID)
+    if keyframe.sha256 != CANDIDATE16_V7_KEYFRAME_SHA256:
+        raise ExternalInputBlocked("Candidate 16 V7 recovery keyframe digest is not authoritative")
+    source_path = config.root / keyframe.path
+    if not source_path.is_file() or sha256_file(source_path) != keyframe.sha256:
+        raise ExternalInputBlocked("Candidate 16 V7 recovery keyframe is missing or hash-mismatched")
+
+    candidates = load_v7_candidates(config.root)
+    if tuple(item.candidate_id for item in candidates) != V7_CANDIDATE_IDS:
+        raise VideoConfigError("V7 recovery requires the canonical A/B/C candidate order")
+    estimates = [candidate_credit_estimate(item, config.providers) for item in candidates]
+    if estimates != [25.0, 25.0, 25.0]:
+        raise ExternalInputBlocked("V7 recovery requires exact 25-credit candidate estimates")
+
+    parent_run = config.root / "runs" / parent_run_id
+    parent_results, inherited_a = _verify_v7_recovery_parent(
+        config.root, parent_run, keyframe, candidates
+    )
+    _block_duplicate_v7_recovery(config.root, parent_run_id)
+
+    plan = _v7_live_plan(candidates, keyframe)
+    code_commit = _authoritative_code_commit()
+    storage = VideoRunStorage(
+        config.root,
+        secrets=(str(environment.get("RUNWAYML_API_SECRET") or ""),),
+    )
+    if provider is None:
+        provider = _create_motion_provider(config, environment)
+
+    provisional_all = _v7_live_requests(
+        "video-motion-v7-recovery-preflight", config, keyframe, candidates, plan
+    )
+    provisional = provisional_all[1:]
+    for request in provisional:
+        provider.validate_request(request)
+
+    run = storage.create_run("motion-v7-recovery")
+    requests = _v7_live_requests(run.run_id, config, keyframe, candidates, plan)[1:]
+    for request in requests:
+        provider.validate_request(request)
+    started_at = datetime.now().astimezone().isoformat()
+    metadata = [
+        {
+            **candidate.evidence(float(estimate)),
+            "submission_state": "inherited_succeeded" if index == 0 else "planned",
+            "submission_attempts": 0,
+        }
+        for index, (candidate, estimate) in enumerate(
+            zip(candidates, estimates, strict=True)
+        )
+    ]
+    _write_v7_recovery_preflight(
+        config=config,
+        storage=storage,
+        run=run,
+        plan=plan,
+        keyframe=keyframe,
+        parent_run_id=parent_run_id,
+        requests=requests,
+        candidate_metadata=metadata,
+        code_commit=code_commit,
+        started_at=started_at,
+    )
+
+    executions: list[ExecutionRecord] = []
+    for request in requests:
+        record = _execute_v7_request_once(
+            request,
+            provider,
+            storage,
+            run,
+            config.root / "outputs/broll" / run.run_id,
+            25.0,
+        )
+        executions.append(record)
+        if record.status is not VideoTaskStatus.SUCCEEDED or not record.artifacts:
+            break
+    successful = sum(
+        item.status is VideoTaskStatus.SUCCEEDED and bool(item.artifacts)
+        for item in executions
+    )
+    status = "SUCCEEDED" if successful == 2 else ("PARTIAL" if successful else "FAILED")
+    _complete_v7_recovery_bundle(
+        config=config,
+        storage=storage,
+        run=run,
+        candidates=candidates,
+        requests=requests,
+        executions=executions,
+        inherited_a=inherited_a,
+        parent_results=parent_results,
+        parent_run_id=parent_run_id,
+        provider=provider,
+        status=status,
+        started_at=started_at,
+    )
+    if status == "SUCCEEDED":
+        _create_candidate16_v7_review_package(
+            config.root, run, parent_run_id, inherited_a, candidates, executions
+        )
+    storage.append_event(
+        run,
+        "motion_v7_recovery_completed",
+        {
+            "status": status,
+            "parent_run_id": parent_run_id,
+            "submitted_candidate_ids": [item.shot_id for item in requests[: len(executions)]],
+            "automatic_retries": 0,
+            "replacement_tasks": 0,
+        },
+    )
+    storage.assert_complete(run)
+    return VideoRunOutcome(
+        run.run_id,
+        run.path,
+        run,
+        plan,
+        2,
+        sum(1 for item in executions if item.provider_task_id),
+        status,
+    )
+
+
+def _read_json_evidence(path: Path, label: str) -> dict[str, Any]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ExternalInputBlocked(f"V7 recovery {label} evidence is unreadable") from exc
+    if not isinstance(value, dict):
+        raise ExternalInputBlocked(f"V7 recovery {label} evidence is invalid")
+    return value
+
+
+def _verify_v7_recovery_parent(
+    root: Path,
+    parent_run: Path,
+    keyframe: ApprovedKeyframe,
+    candidates: tuple[Any, ...],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    if not parent_run.is_dir() or parent_run.parent != root / "runs":
+        raise ExternalInputBlocked("V7 recovery parent run does not exist")
+    request = _read_json_evidence(parent_run / "request.json", "parent request")
+    results = _read_json_evidence(parent_run / "provider-results.json", "parent results")
+    source = _read_json_evidence(parent_run / "keyframe-hash.json", "parent keyframe")
+    if request.get("action") != "motion_v7_live" or request.get("run_id") != parent_run.name:
+        raise ExternalInputBlocked("V7 recovery parent is not a V7 live run")
+    if source.get("keyframe_id") != keyframe.keyframe_id or source.get("sha256") != keyframe.sha256:
+        raise ExternalInputBlocked("V7 recovery parent used a different keyframe")
+    recorded_requests = request.get("requests")
+    if not isinstance(recorded_requests, list) or len(recorded_requests) != 3:
+        raise ExternalInputBlocked("V7 recovery parent request batch is invalid")
+    if [item.get("shot_id") for item in recorded_requests] != list(V7_CANDIDATE_IDS):
+        raise ExternalInputBlocked("V7 recovery parent candidate order is invalid")
+    if any(item.get("image_sha256") != keyframe.sha256 for item in recorded_requests):
+        raise ExternalInputBlocked("V7 recovery parent request keyframe digest is invalid")
+    if any(item.get("max_retries") != 0 for item in recorded_requests):
+        raise ExternalInputBlocked("V7 recovery parent retry policy is invalid")
+    rows = results.get("results")
+    if (
+        results.get("status") != "PARTIAL"
+        or results.get("automatic_retries") != 0
+        or results.get("replacement_tasks") != 0
+        or results.get("submission_count") != 1
+        or not isinstance(rows, list)
+        or len(rows) != 3
+    ):
+        raise ExternalInputBlocked("V7 recovery parent is not the required partial state")
+    if [item.get("candidate_id") for item in rows] != list(V7_CANDIDATE_IDS):
+        raise ExternalInputBlocked("V7 recovery parent result order is invalid")
+    a, b, c = rows
+    if (
+        a.get("provider_status") != "SUCCEEDED"
+        or not a.get("provider_task_id")
+        or a.get("submission_attempts") != 1
+        or len(a.get("artifacts") or []) != 1
+    ):
+        raise ExternalInputBlocked("V7 recovery requires one durable successful V7-A")
+    artifact = a["artifacts"][0]
+    artifact_path = root / str(artifact.get("path") or "")
+    if (
+        not artifact_path.is_file()
+        or artifact.get("sha256") != sha256_file(artifact_path)
+        or artifact.get("provider_task_id") != a.get("provider_task_id")
+    ):
+        raise ExternalInputBlocked("V7 recovery inherited V7-A media is missing or hash-mismatched")
+    if (
+        b.get("submission_state") != "failed"
+        or b.get("submission_attempts") != 1
+        or b.get("provider_task_id") is not None
+        or b.get("artifacts") != []
+        or "credit" not in str(b.get("error_message") or "").lower()
+    ):
+        raise ExternalInputBlocked("V7 recovery requires B failed before task creation on credits")
+    if (
+        c.get("submission_state") != "not_submitted"
+        or c.get("submission_attempts") != 0
+        or c.get("provider_task_id") is not None
+        or c.get("artifacts") != []
+    ):
+        raise ExternalInputBlocked("V7 recovery requires C to be unsubmitted")
+    with (parent_run / "review.csv").open(newline="", encoding="utf-8") as handle:
+        review_rows = list(csv.DictReader(handle))
+    if len(review_rows) != 3 or any(
+        str(row.get(field) or "").strip()
+        for row in review_rows
+        for field in QA_FIELDS[4:]
+    ):
+        raise ExternalInputBlocked("V7 recovery parent Human QA must remain blank")
+    return results, a
+
+
+def _block_duplicate_v7_recovery(root: Path, parent_run_id: str) -> None:
+    for request_path in (root / "runs").glob("*/request.json"):
+        try:
+            request = json.loads(request_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if (
+            request.get("action") == "motion_v7_recovery"
+            and request.get("parent_run_id") == parent_run_id
+        ):
+            raise ExternalInputBlocked(
+                f"V7 recovery already exists for parent run: {request_path.parent.name}"
+            )
+
+
+def _write_v7_recovery_preflight(
+    *,
+    config: VideoProjectConfig,
+    storage: VideoRunStorage,
+    run: VideoRunContext,
+    plan: ShotPlan,
+    keyframe: ApprovedKeyframe,
+    parent_run_id: str,
+    requests: list[MotionVideoRequest],
+    candidate_metadata: list[dict[str, Any]],
+    code_commit: str,
+    started_at: str,
+) -> None:
+    storage.append_event(run, "recovery_preflight_verified", {"parent_run_id": parent_run_id})
+    storage.write_json_new(
+        run,
+        "request.json",
+        {
+            "run_id": run.run_id,
+            "action": "motion_v7_recovery",
+            "preset": "motion-v7",
+            "mode": "LIVE",
+            "provider": "runway",
+            "parent_run_id": parent_run_id,
+            "authoritative_code_commit": code_commit,
+            "runner_sha256": sha256_file(Path(__file__)),
+            "started_at": started_at,
+            "planned_submissions": 2,
+            "submitted_candidate_ids": list(V7_CANDIDATE_IDS[1:]),
+            "inherited_candidate_id": V7_CANDIDATE_IDS[0],
+            "estimated_runway_credits": 50.0,
+            "max_runway_credits": 50.0,
+            "automatic_paid_retries": 0,
+            "requests": [to_primitive(item) for item in requests],
+            "candidate_metadata": candidate_metadata,
+        },
+    )
+    storage.write_yaml_new(
+        run,
+        "resolved-config.yaml",
+        {
+            "action": "motion_v7_recovery",
+            "live": True,
+            "provider": "runway",
+            "parent_run_id": parent_run_id,
+            "planned_submissions": 2,
+            "estimated_runway_credits": 50.0,
+            "max_runway_credits": 50.0,
+            "automatic_submission_retries": 0,
+            "failure_policy": "fail_stop",
+            "winner_selection": "human_only",
+            "coffee_table_execution": "forbidden",
+        },
+    )
+    storage.write_bytes_new(run, "script.txt", b"")
+    storage.write_json_new(run, "script-hash.json", {"status": "not_applicable", "sha256": None})
+    storage.write_json_new(run, "audio-hash.json", {"status": "not_applicable", "sha256": None})
+    storage.write_json_new(run, "keyframe-hash.json", _keyframe_evidence(keyframe, config))
+    storage.write_json_new(
+        run,
+        "shot-plan.json",
+        {
+            **to_primitive(plan),
+            "parent_run_id": parent_run_id,
+            "recovery_only": list(V7_CANDIDATE_IDS[1:]),
+            "candidate_metadata": candidate_metadata,
+        },
+    )
+    storage.write_text_new(run, "edit-commands.txt", "")
+    storage.write_review_new(
+        run,
+        blank_review_rows(
+            run.run_id,
+            "motion-v7",
+            [
+                {"video_id": item, "candidate": f"{item}.mp4"}
+                for item in V7_CANDIDATE_IDS
+            ],
+        ),
+    )
+    storage.write_json_new(
+        run,
+        "cost.json",
+        {
+            "state": "PREFLIGHT_ESTIMATE",
+            "parent_confirmed_actual_runway_credits": 25.0,
+            "estimated_runway_credits": 50.0,
+            "max_runway_credits": 50.0,
+            "projected_total_v7_credits": 75.0,
+            "projected_recovery_cost_usd": 0.5,
+            "projected_total_v7_cost_usd": 0.75,
+        },
+    )
+
+
+def _complete_v7_recovery_bundle(
+    *,
+    config: VideoProjectConfig,
+    storage: VideoRunStorage,
+    run: VideoRunContext,
+    candidates: tuple[Any, ...],
+    requests: list[MotionVideoRequest],
+    executions: list[ExecutionRecord],
+    inherited_a: dict[str, Any],
+    parent_results: dict[str, Any],
+    parent_run_id: str,
+    provider: Any,
+    status: str,
+    started_at: str,
+) -> None:
+    by_request = {item.request_id: item for item in executions}
+    rows = [{**inherited_a, "evidence_source_run_id": parent_run_id}]
+    for candidate, request in zip(candidates[1:], requests, strict=True):
+        execution = by_request.get(request.request_id)
+        if execution is None:
+            rows.append(
+                {
+                    "candidate_id": candidate.candidate_id,
+                    "submission_state": "not_submitted",
+                    "submission_attempts": 0,
+                    "provider_task_id": None,
+                    "provider_status": None,
+                    "artifacts": [],
+                }
+            )
+        else:
+            rows.append(
+                {
+                    "candidate_id": candidate.candidate_id,
+                    "experiment_level": candidate.experiment_level,
+                    "prompt_path": candidate.prompt.path,
+                    "prompt_sha256": candidate.prompt.sha256,
+                    "estimated_credits": 25.0,
+                    "submission_state": "submitted" if execution.provider_task_id else "failed",
+                    "submission_attempts": execution.submission_attempts,
+                    "provider_task_id": execution.provider_task_id,
+                    "provider_status": execution.status.value,
+                    "error_code": execution.error_code,
+                    "error_message": execution.error_message,
+                    "provider_actual_credits": execution.actual_credits,
+                    "artifacts": [_artifact_evidence(item, config.root) for item in execution.artifacts],
+                    "evidence_source_run_id": run.run_id,
+                }
+            )
+    task_ids = [item.provider_task_id for item in executions if item.provider_task_id]
+    actual = [item.actual_credits for item in executions if item.actual_credits is not None]
+    http_count = getattr(provider, "http_request_count", None)
+    storage.write_json_new(
+        run,
+        "provider-results.json",
+        {
+            "status": status,
+            "provider": "runway",
+            "parent_run_id": parent_run_id,
+            "started_at": started_at,
+            "completed_at": datetime.now().astimezone().isoformat(),
+            "planned_submissions": 2,
+            "submission_attempts": sum(item.submission_attempts for item in executions),
+            "submission_count": len(task_ids),
+            "provider_task_ids": task_ids,
+            "inherited_provider_task_ids": parent_results.get("provider_task_ids", []),
+            "automatic_retries": 0,
+            "replacement_tasks": 0,
+            "actual_runway_credits": sum(actual) if len(actual) == len(executions) else None,
+            "combined_confirmed_actual_runway_credits": (
+                25.0 + sum(actual) if len(actual) == len(executions) else None
+            ),
+            "http_request_count": http_count if isinstance(http_count, int) else None,
+            "results": rows,
+        },
+    )
+    storage.write_text_new(
+        run,
+        "summary.md",
+        summary_markdown(
+            run_id=run.run_id,
+            preset="motion-v7-recovery",
+            status=status,
+            provider_call_count=2,
+            output_count=sum(len(item.artifacts) for item in executions),
+            total_provider_cost=0.5,
+        )
+        + "\n- V7-A: inherited exact evidence; never resubmitted\n"
+        + "- Winner selection: pending Owner Human Review\n"
+        + "- Coffee Table: not executed\n",
+    )
+
+
+def _create_candidate16_v7_review_package(
+    root: Path,
+    run: VideoRunContext,
+    parent_run_id: str,
+    inherited_a: dict[str, Any],
+    candidates: tuple[Any, ...],
+    executions: list[ExecutionRecord],
+) -> Path:
+    package = root / "outputs/reviews/candidate16-v7"
+    package.mkdir(parents=True, exist_ok=False)
+    sources = [root / inherited_a["artifacts"][0]["path"]]
+    sources.extend(item.artifacts[0].path for item in executions)
+    media: list[dict[str, Any]] = []
+    for candidate, source in zip(candidates, sources, strict=True):
+        destination = package / f"{candidate.candidate_id}.mp4"
+        shutil.copyfile(source, destination)
+        if sha256_file(destination) != sha256_file(source):
+            raise RuntimeError("V7 review package exact-byte copy verification failed")
+        media.append(
+            {
+                "candidate_id": candidate.candidate_id,
+                "path": str(destination.relative_to(root)),
+                "sha256": sha256_file(destination),
+                "size_bytes": destination.stat().st_size,
+            }
+        )
+    comparison = package / "v7-a-b-c-comparison.mp4"
+    try:
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-i",
+                str(package / f"{candidates[0].candidate_id}.mp4"),
+                "-i",
+                str(package / f"{candidates[1].candidate_id}.mp4"),
+                "-i",
+                str(package / f"{candidates[2].candidate_id}.mp4"),
+                "-filter_complex",
+                (
+                    "[0:v]scale=640:360,setsar=1[a];"
+                    "[1:v]scale=640:360,setsar=1[b];"
+                    "[2:v]scale=640:360,setsar=1[c];"
+                    "[a][b][c]hstack=inputs=3[v]"
+                ),
+                "-map",
+                "[v]",
+                "-t",
+                "5",
+                "-an",
+                "-c:v",
+                "libx264",
+                "-pix_fmt",
+                "yuv420p",
+                "-movflags",
+                "+faststart",
+                str(comparison),
+            ],
+            check=True,
+            capture_output=True,
+            timeout=120,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise RuntimeError("could not create V7 A/B/C comparison video") from exc
+    shutil.copyfile(run.path / "review.csv", package / "review.csv")
+    manifest = {
+        "state": "READY_FOR_OWNER_CANDIDATE16_V7_REVIEW",
+        "character_id": "character-20260821-001",
+        "keyframe_id": CANDIDATE16_V7_KEYFRAME_ID,
+        "keyframe_sha256": CANDIDATE16_V7_KEYFRAME_SHA256,
+        "parent_run_id": parent_run_id,
+        "recovery_run_id": run.run_id,
+        "winner": None,
+        "human_review_required": True,
+        "coffee_table_executed": False,
+        "comparison": {
+            "layout": "left=A, center=B, right=C",
+            "path": str(comparison.relative_to(root)),
+            "sha256": sha256_file(comparison),
+            "size_bytes": comparison.stat().st_size,
+        },
+        "media": media,
+    }
+    (package / "manifest.json").write_text(
+        json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    (package / "README.md").write_text(
+        "# Candidate 16 V7 Owner Review\n\n"
+        "State: `READY_FOR_OWNER_CANDIDATE16_V7_REVIEW`\n\n"
+        "Compare Camera Lock, Framing, Candidate 16 Identity, Eyes/Face, Mouth, Hair, "
+        "red dress/jewelry, motion stability, X/Y drift, scale/width change, and suitability "
+        "as the Coffee Table motion baseline. Record Human QA in `review.csv`; no winner "
+        "has been selected and Coffee Table has not run.\n",
+        encoding="utf-8",
+    )
+    return package
+
+
 def _v7_live_plan(candidates: tuple[Any, ...], keyframe: ApprovedKeyframe) -> ShotPlan:
     shots = tuple(
         PlannedShot(
@@ -3687,7 +4236,207 @@ def handle_video_command(args: Any) -> tuple[int, Any]:
                 candidate_id=args.candidate_id,
                 review_file=Path(args.review_file),
             )
+        if args.keyframe_command == "validate-review-package":
+            from .keyframe_sets import validate_review_package
+
+            return 0, validate_review_package(args.project_root, Path(args.package))
+        if args.keyframe_command == "promote-reviewed":
+            from .keyframe_sets import promote_reviewed_candidate
+
+            return 0, promote_reviewed_candidate(
+                args.project_root,
+                package=Path(args.package),
+                candidate_id=args.candidate_id,
+            )
         raise ValueError(f"keyframe command is not implemented: {args.keyframe_command}")
+    if args.video_command == "keyframe-set":
+        from .keyframe_sets import (
+            bind_goal2,
+            build_keyframe_set,
+            preflight_goal2,
+            publish_keyframe_set,
+        )
+
+        if args.keyframe_set_command == "build":
+            return 0, build_keyframe_set(
+                args.project_root,
+                set_id=args.set_id,
+                review_package=Path(args.review_package),
+            )
+        if args.keyframe_set_command == "publish":
+            return 0, publish_keyframe_set(args.project_root, set_id=args.set_id)
+        if args.keyframe_set_command == "bind-goal2":
+            return 0, bind_goal2(args.project_root, set_id=args.set_id)
+        if args.keyframe_set_command == "preflight":
+            return 0, preflight_goal2(args.project_root)
+        raise ValueError(
+            f"keyframe-set command is not implemented: {args.keyframe_set_command}"
+        )
+    if args.video_command == "campaign":
+        if args.campaign_command == "coffee-table":
+            from .campaigns import (
+                CampaignError,
+                prepare_coffee_table_execution_manifest,
+                preview_coffee_table,
+            )
+
+            if args.recovery_live and not args.live:
+                raise CampaignError("--recovery-live requires --live")
+
+            if args.dry_run:
+                return 0, preview_coffee_table(args.project_root)
+            if args.prepare_execution_manifest:
+                if args.parent_plan is None or not args.parent_plan_sha256:
+                    raise CampaignError(
+                        "execution-manifest preparation requires --parent-plan and "
+                        "--parent-plan-sha256"
+                    )
+                return 0, prepare_coffee_table_execution_manifest(
+                    args.project_root,
+                    parent_plan=Path(args.parent_plan),
+                    parent_plan_sha256=args.parent_plan_sha256,
+                    confirm_owner_authorized_manifest_preparation=bool(
+                        args.confirm_owner_authorized_manifest_preparation
+                    ),
+                )
+            if args.prepare_recovery:
+                from .coffee_table_recovery import prepare_coffee_table_recovery
+
+                if (
+                    args.execution_manifest is None
+                    or not args.execution_manifest_sha256
+                    or not args.failed_live_run
+                ):
+                    raise CampaignError(
+                        "Coffee Table recovery requires --execution-manifest, "
+                        "--execution-manifest-sha256, and --failed-live-run"
+                    )
+                outcome = prepare_coffee_table_recovery(
+                    args.project_root,
+                    manifest_path=Path(args.execution_manifest),
+                    manifest_sha256=args.execution_manifest_sha256,
+                    failed_live_run_id=args.failed_live_run,
+                )
+                return 0, {
+                    "recovery_id": outcome.recovery_id,
+                    "status": outcome.status,
+                    "parent_execution_manifest_sha256": outcome.parent_manifest_sha256,
+                    "failed_live_run_id": outcome.failed_live_run_id,
+                    "local_task_03": dict(outcome.local_task_03),
+                    "task_04_source": dict(outcome.task_04_source),
+                    "task_04_prompt": dict(outcome.task_04_prompt),
+                    "recovery_manifest_path": str(outcome.recovery_manifest_path),
+                    "recovery_manifest_sha256": outcome.recovery_manifest_sha256,
+                    "historical_actual_credits": outcome.historical_actual_credits,
+                    "historical_actual_cost_usd": outcome.historical_actual_cost_usd,
+                    "projected_additional_live_credits": outcome.projected_additional_live_credits,
+                    "projected_additional_live_cost_usd": outcome.projected_additional_live_cost_usd,
+                    "projected_final_credits": outcome.projected_final_credits,
+                    "projected_final_cost_usd": outcome.projected_final_cost_usd,
+                    "provider_submissions": outcome.provider_submissions,
+                    "paid_calls": outcome.paid_calls,
+                }
+            if args.prepare_v3_recovery:
+                from .coffee_table_v3_recovery import prepare_coffee_table_v3_recovery
+
+                outcome = prepare_coffee_table_v3_recovery(args.project_root)
+                return 0, {
+                    "recovery_id": outcome.recovery_id,
+                    "status": outcome.status,
+                    "owner_decision_path": str(outcome.owner_decision_path),
+                    "owner_decision_sha256": outcome.owner_decision_sha256,
+                    "source_frame_review_path": str(outcome.source_frame_review_path),
+                    "source_frame_review_sha256": outcome.source_frame_review_sha256,
+                    "manifest_path": str(outcome.manifest_path),
+                    "manifest_sha256": outcome.manifest_sha256,
+                    "provider_calls": outcome.provider_calls,
+                    "paid_calls": outcome.paid_calls,
+                }
+            if args.live:
+                if args.recovery_live:
+                    from .coffee_table_recovery_live import (
+                        execute_coffee_table_recovery_live,
+                    )
+
+                    if (
+                        args.execution_manifest is None
+                        or not args.execution_manifest_sha256
+                        or args.max_runway_credits is None
+                        or args.max_provider_cost_usd is None
+                    ):
+                        raise CampaignError(
+                            "Coffee Table Recovery Live requires --execution-manifest, "
+                            "--execution-manifest-sha256, --max-runway-credits, and "
+                            "--max-provider-cost-usd"
+                        )
+                    outcome = execute_coffee_table_recovery_live(
+                        args.project_root,
+                        manifest_path=Path(args.execution_manifest),
+                        manifest_sha256=args.execution_manifest_sha256,
+                        confirm_owner_authorized_live=bool(
+                            args.confirm_owner_authorized_live
+                        ),
+                        max_runway_credits=args.max_runway_credits,
+                        max_provider_cost_usd=args.max_provider_cost_usd,
+                    )
+                    return 0, {
+                        "run_id": outcome.run_id,
+                        "run_dir": str(outcome.run_dir),
+                        "status": outcome.status,
+                        "recovery_id": outcome.recovery_id,
+                        "manifest_sha256": outcome.manifest_sha256,
+                        "provider_task_id": outcome.provider_task_id,
+                        "task_04": dict(outcome.task_04),
+                        "delivery": dict(outcome.delivery),
+                        "review_package": dict(outcome.review_package),
+                        "integrity": dict(outcome.integrity),
+                        "provider_submissions": outcome.provider_submissions,
+                        "automatic_paid_retries": outcome.automatic_paid_retries,
+                        "automatic_replacement_tasks": outcome.automatic_replacement_tasks,
+                        "actual_credits": outcome.actual_credits,
+                        "actual_cost_usd": outcome.actual_cost_usd,
+                        "historical_credits": outcome.historical_credits,
+                        "historical_cost_usd": outcome.historical_cost_usd,
+                        "total_credits": outcome.total_credits,
+                        "total_cost_usd": outcome.total_cost_usd,
+                    }
+                from .coffee_table_live import execute_coffee_table_live
+
+                if (
+                    args.execution_manifest is None
+                    or not args.execution_manifest_sha256
+                    or args.max_runway_credits is None
+                    or args.max_provider_cost_usd is None
+                ):
+                    raise CampaignError(
+                        "Coffee Table Live requires --execution-manifest, "
+                        "--execution-manifest-sha256, --max-runway-credits, and "
+                        "--max-provider-cost-usd"
+                    )
+                outcome = execute_coffee_table_live(
+                    args.project_root,
+                    manifest_path=Path(args.execution_manifest),
+                    manifest_sha256=args.execution_manifest_sha256,
+                    confirm_owner_authorized_live=bool(args.confirm_owner_authorized_live),
+                    max_runway_credits=args.max_runway_credits,
+                    max_provider_cost_usd=args.max_provider_cost_usd,
+                )
+                return 0, {
+                    "run_id": outcome.run_id,
+                    "run_dir": str(outcome.run_dir),
+                    "status": outcome.status,
+                    "manifest_sha256": outcome.manifest_sha256,
+                    "task_ids": list(outcome.task_ids),
+                    "raw_artifacts": list(outcome.raw_artifacts),
+                    "delivery": outcome.delivery,
+                    "provider_submissions": outcome.provider_submissions,
+                    "automatic_paid_retries": outcome.automatic_paid_retries,
+                    "automatic_replacement_tasks": outcome.automatic_replacement_tasks,
+                    "actual_credits": outcome.actual_credits,
+                    "projected_cost_usd": outcome.projected_cost_usd,
+                }
+            raise CampaignError("Coffee Table campaign mode is required")
+        raise ValueError(f"campaign command is not implemented: {args.campaign_command}")
     if args.video_command == "motion-v7-dry-run":
         outcome = preview_motion_v7(args.project_root, keyframe_id=args.keyframe)
         return 0, {
@@ -3712,6 +4461,32 @@ def handle_video_command(args: Any) -> tuple[int, Any]:
             "planned_provider_calls": outcome.provider_call_count,
             "task_submission_count": outcome.submission_count,
         }
+    if args.video_command == "motion-v7-recover":
+        outcome = recover_motion_v7_live(
+            args.project_root,
+            parent_run_id=args.parent_run_id,
+            execute_live=bool(args.execute_live),
+            confirm_missing_bc=bool(args.confirm_missing_bc),
+            max_runway_credits=args.max_runway_credits,
+        )
+        return (0 if outcome.status == "SUCCEEDED" else 3), {
+            "run_id": outcome.run_id,
+            "run_dir": str(outcome.run_dir),
+            "status": outcome.status,
+            "planned_provider_calls": outcome.provider_call_count,
+            "task_submission_count": outcome.submission_count,
+            "next_state": (
+                "READY_FOR_OWNER_CANDIDATE16_V7_REVIEW"
+                if outcome.status == "SUCCEEDED"
+                else "V7_RECOVERY_INCOMPLETE"
+            ),
+        }
+    if args.video_command == "motion-v7-register-review":
+        from .candidate16_v7 import register_candidate16_v7_review
+
+        return 0, register_candidate16_v7_review(
+            args.project_root, package=Path(args.package)
+        )
     if args.video_command == "motion-smoke-test":
         options = VideoRunOptions(
             preset="motion_smoke",
@@ -3938,13 +4713,19 @@ def _resolve_keyframe_role(
 def _pilot_keyframes(
     config: VideoProjectConfig, options: VideoRunOptions
 ) -> tuple[ApprovedKeyframe, ApprovedKeyframe]:
+    bound_ids: Mapping[str, str] = {}
+    binding_path = config.root / "configs/goal2-binding.yaml"
+    if binding_path.is_file() and (config.root / "outputs/keyframe-sets").is_dir():
+        from .keyframe_sets import current_goal2_member_ids
+
+        bound_ids = current_goal2_member_ids(config.root)
     talking = _resolve_keyframe_role(
         config,
         role="talking_medium_closeup",
-        selected=options.talking_keyframe_id or options.keyframe_id,
+        selected=options.talking_keyframe_id or options.keyframe_id or bound_ids.get("K2"),
         label="talking",
     )
-    motion_selection = options.motion_keyframe_id
+    motion_selection = options.motion_keyframe_id or bound_ids.get("K1")
     if motion_selection:
         motion = _keyframe(config, motion_selection)
         if not ({"pilot_home_context", "establishing_keyframe"} & set(motion.roles)):

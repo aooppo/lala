@@ -21,6 +21,9 @@ from tests.fakes_video import FakeTalkingProvider
 from tests.test_heygen_talking_provider import make_request
 
 
+SYNTHETIC_SIGNED_OUTPUT_URL = "https://example.test/output.mp4?" + "signature=secret"
+
+
 @pytest.mark.parametrize(
     "environment",
     [
@@ -132,7 +135,7 @@ def test_video_download_retries_then_content_validates(
         destination.write_bytes(synthetic_video.read_bytes())
 
     artifact = download_video(
-        "https://example.test/output.mp4?signature=secret",
+        SYNTHETIC_SIGNED_OUTPUT_URL,
         tmp_path / "downloaded.mp4",
         provider_task_id="task-1",
         artifact_id="artifact-1",

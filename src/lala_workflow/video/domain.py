@@ -28,6 +28,9 @@ class ApprovedKeyframe:
     source_candidate_sha256: str | None = None
     source_reference: str | None = None
     review_file_sha256: str | None = None
+    character_id: str | None = None
+    character_profile_sha256: str | None = None
+    formal_role: str | None = None
     roles: tuple[str, ...] = ()
 
 

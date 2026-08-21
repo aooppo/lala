@@ -1,0 +1,28 @@
+{
+  "approved_at": "2026-08-21T14:26:24+08:00",
+  "approved_path": "assets/approved_keyframes/K2-002.png",
+  "approved_sha256": "78478b171552472227772f5efc092380b69da6b698cc13182880967e3a26bd59",
+  "candidate_id": "K2-002",
+  "character_display_name": "Candidate 16",
+  "character_id": "character-20260821-001",
+  "character_profile_sha256": "659378036a36b44f69b2e5bb4312d1a62446da36b30f52eaf67e1337cfaa434b",
+  "copy_policy": "exact-byte",
+  "formal_role": "pilot_talking_medium_closeup",
+  "model": "gen4_image",
+  "provenance_type": "candidate16_review_package_promotion",
+  "provider": "runway",
+  "provider_task_id": "cf2279c7-9fb2-4fa6-820d-4754a66e0728",
+  "reviewer": "Project owner (explicit human decision)",
+  "roles": [
+    "talking_medium_closeup"
+  ],
+  "schema_version": "candidate16-reviewed-keyframe-promotion/v1",
+  "source_manifest": "outputs/reviews/candidate16-keyframes-v2/manifest.json",
+  "source_manifest_sha256": "979f4990141d5a734056b8b891bfd27d14f58287dea4eadae223ee041f5444be",
+  "source_package": "outputs/reviews/candidate16-keyframes-v2",
+  "source_review": "outputs/reviews/candidate16-keyframes-v2/review.csv",
+  "source_review_sha256": "e083676c75933f550fb81bbad5b897265847e46cd4406e674961ee4b44cf873d",
+  "source_run_id": "LALA-RUNWAY-20260821-051041-PILOT-TALKING-KEYFRAME-001",
+  "staged_path": "outputs/reviews/candidate16-keyframes-v2/K2/K2-002.png",
+  "staged_sha256": "78478b171552472227772f5efc092380b69da6b698cc13182880967e3a26bd59"
+}

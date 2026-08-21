@@ -11,7 +11,7 @@ from ..hashing import sha256_file
 from ..providers.base import ProviderValidationError
 from ..redaction import redact_text
 from ..video.domain import MediaArtifact, MotionVideoRequest, VideoTaskResult, VideoTaskStatus
-from ..video.downloads import inspect_video
+from ..video.downloads import inspect_video, redacted_url
 from .domain import (
     CharacterProfile,
     MotionOperationRecord,
@@ -27,6 +27,11 @@ from .storage import CharacterStorage
 
 
 PURPOSE = "candidate_character_motion_preview"
+OWNER_RISK_OVERRIDE_REASON = (
+    "Owner accepts possible duplicate billing risk for the unrecoverable legacy Candidate 16 "
+    "motion attempt and authorizes exactly one new motion-only submission after persistence/"
+    "recovery protections were fixed and fully tested."
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,13 +88,40 @@ class MotionOperationExecutor:
         provider: Any,
         destination: Path,
         legacy_submission_unknown: bool = False,
+        owner_risk_override: bool = False,
     ) -> MotionExecutionOutcome:
         fingerprint = motion_request_fingerprint(profile, static_preview, request)
-        record = self.storage.load_motion_operation(profile.character_id, fingerprint)
+        legacy_record = self.storage.load_motion_operation(profile.character_id, fingerprint)
+        if owner_risk_override:
+            if (
+                legacy_record is None
+                or legacy_record.state is not MotionOperationState.SUBMISSION_UNKNOWN
+            ):
+                raise CharacterIntegrityError(
+                    "owner-risk override requires preserved legacy SUBMISSION_UNKNOWN evidence"
+                )
+            record = self.storage.load_motion_override_operation(
+                profile.character_id, fingerprint
+            )
+        else:
+            record = legacy_record
         if record is None:
             record = self._prepared_record(profile, static_preview, request, fingerprint)
+            if owner_risk_override:
+                record = replace(
+                    record,
+                    operation_id=f"character-motion-{fingerprint[:20]}-owner-risk-override-001",
+                    owner_risk_override=True,
+                    owner_risk_override_reason=OWNER_RISK_OVERRIDE_REASON,
+                    owner_risk_override_max_new_submissions=1,
+                    owner_risk_override_max_new_credits=25.0,
+                    owner_risk_override_max_new_usd=0.25,
+                    owner_risk_override_automatic_retries=0,
+                    legacy_operation_id=legacy_record.operation_id if legacy_record else None,
+                    legacy_submission_state="SUBMISSION_STATE_UNKNOWN",
+                )
             self.storage.write_motion_operation(record)
-            if legacy_submission_unknown:
+            if legacy_submission_unknown and not owner_risk_override:
                 record = replace(
                     record,
                     state=MotionOperationState.SUBMISSION_UNKNOWN,
@@ -133,7 +165,9 @@ class MotionOperationExecutor:
             self.storage.write_motion_operation(record)
             raise
         if record.state is MotionOperationState.DOWNLOAD_FAILED:
-            return self._download(record, request, provider, destination)
+            # Query the durable task again for a fresh signed URL; signed query strings are never
+            # persisted in runtime evidence.
+            return self._poll(record, request, provider, destination)
         if record.state in {MotionOperationState.SUBMITTED, MotionOperationState.POLLING}:
             return self._poll(record, request, provider, destination)
         if record.state not in {
@@ -143,6 +177,13 @@ class MotionOperationExecutor:
             MotionOperationState.PROVIDER_FAILED,
         }:
             raise CharacterIntegrityError(f"unsupported motion operation state: {record.state.value}")
+        if (
+            record.owner_risk_override
+            and record.attempt >= int(record.owner_risk_override_max_new_submissions or 0)
+        ):
+            raise PreviewUnavailableError(
+                "owner-risk motion override submission cap is exhausted; no retry is allowed"
+            )
         return self._submit(record, request, provider, destination)
 
     def _prepared_record(
@@ -312,7 +353,7 @@ class MotionOperationExecutor:
                 if result.actual_credits is not None
                 else None
             ),
-            provider_output_urls=tuple(result.output_urls),
+            provider_output_urls=tuple(redacted_url(url) for url in result.output_urls),
         )
         if result.status is VideoTaskStatus.SUCCEEDED:
             self.storage.write_motion_operation(record)

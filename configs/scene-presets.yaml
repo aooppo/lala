@@ -8,3 +8,24 @@ presets:
     prompt_file: prompts/home-decor-v1.txt
     default_count: 5
     default_ratio: "1920:1080"
+
+  pilot_home_keyframe:
+    purpose: Build a reviewed home-context video keyframe for the active character.
+    references: [face, full_body, scene]
+    prompt_file: prompts/pilot-home-keyframe-v1.txt
+    default_count: 3
+    default_ratio: "1920:1080"
+
+  pilot_talking_keyframe:
+    purpose: Build a reviewed talking medium-close-up keyframe for the active character.
+    references: [face, full_body]
+    prompt_file: prompts/pilot-talking-keyframe-v1.txt
+    default_count: 3
+    default_ratio: "1080:1440"
+
+  pilot_product_keyframe:
+    purpose: Build a reviewed product-presentation keyframe for the active character.
+    references: [face, full_body, scene]
+    prompt_file: prompts/pilot-product-keyframe-v1.txt
+    default_count: 3
+    default_ratio: "1920:1080"

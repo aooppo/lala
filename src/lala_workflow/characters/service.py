@@ -169,7 +169,13 @@ class CharacterService:
             self._mark_preview_ready(view.profile, result)
         return result
 
-    def recover_motion(self, character_id: str, *, live: bool = False):
+    def recover_motion(
+        self,
+        character_id: str,
+        *,
+        live: bool = False,
+        owner_risk_override: bool = False,
+    ):
         view = self.show(character_id)
         build = view.build
         if view.is_active or build is None or build.static_preview is None:
@@ -190,6 +196,7 @@ class CharacterService:
             build,
             live=live,
             legacy_submission_unknown=legacy_unknown,
+            owner_risk_override=owner_risk_override,
         )
         self.storage.write_build(result)
         self.storage.append_event(

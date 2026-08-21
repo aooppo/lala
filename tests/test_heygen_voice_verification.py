@@ -22,6 +22,9 @@ from lala_workflow.video.voice_verification import (
 )
 
 
+SYNTHETIC_SIGNED_PREVIEW_URL = "https://files.heygen.test/lala.wav?" + "signature=must-not-persist"
+
+
 def _definition() -> ProviderDefinition:
     return ProviderDefinition(
         name="heygen_voice",
@@ -117,7 +120,7 @@ class _Verifier:
     def preview_url(self, voice_id: str, *, expected_name: str) -> str:
         assert voice_id == EXPECTED_VOICE_ID
         assert expected_name == "Lady LaLa v1"
-        return "https://files.heygen.test/lala.wav?signature=must-not-persist"
+        return SYNTHETIC_SIGNED_PREVIEW_URL
 
 
 def _write_owner_profile(root: Path, *, approval_status: str = "pending") -> None:

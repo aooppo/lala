@@ -56,6 +56,10 @@ class RunOptions:
     allow_staging_character: bool = False
     reference_names: tuple[str, ...] | None = None
     prompt_file: Path | None = None
+    scene_reference: Path | None = None
+    product_reference: Path | None = None
+    reference_source_url: str | None = None
+    reference_sku: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -157,18 +161,12 @@ def run_generation(
                 )
     storage = RunStorage(config.root, secrets=(api_secret,))
 
-    reference_catalog = {**config.manifest.anchors, **config.manifest.qa_references}
-    reference_names = options.reference_names or preset.references
-    references = tuple(
-        ReferenceImage(
-            name=anchor.name,
-            path=config.root / anchor.path,
-            role=anchor.role,
-            tag=anchor.tag,
-            sha256=anchor.sha256,
-            mime_type=anchor.mime_type,
-        )
-        for anchor in (reference_catalog[name] for name in reference_names)
+    references = _resolve_generation_references(
+        config,
+        options,
+        preset,
+        character,
+        max_references=capabilities.model_capabilities[model].max_references,
     )
     prompt = load_prompt(
         config.root,
@@ -314,6 +312,94 @@ def run_generation(
     storage.append_event(run, "dry_run_completed", {"request_count": len(requests)})
     _write_final_artifacts(storage, run, resolved, result, paid_calls=0)
     return RunOutcome(run.run_id, run.path, result)
+
+
+def _resolve_generation_references(
+    config,
+    options: RunOptions,
+    preset,
+    character,
+    *,
+    max_references: int,
+) -> tuple[ReferenceImage, ...]:
+    reference_catalog = {**config.manifest.anchors, **config.manifest.qa_references}
+    external_values = (
+        options.scene_reference,
+        options.product_reference,
+        options.reference_source_url,
+        options.reference_sku,
+    )
+    if options.reference_names is not None and any(value is not None for value in external_values):
+        raise ValueError("reference_names cannot be combined with semantic external references")
+
+    if character is not None and options.preset in {
+        "pilot_home_keyframe",
+        "pilot_product_keyframe",
+    }:
+        from .characters.references import plan_pilot_references
+
+        return plan_pilot_references(
+            config.root,
+            character.profile,
+            preset=options.preset,
+            scene_reference=options.scene_reference,
+            product_reference=options.product_reference,
+            source_url=options.reference_source_url,
+            sku=options.reference_sku,
+            max_references=max_references,
+        )
+
+    if any(value is not None for value in external_values):
+        raise ValueError(
+            "semantic external references are supported only for pilot_home_keyframe and "
+            "pilot_product_keyframe"
+        )
+
+    reference_names = options.reference_names or preset.references
+    if character is not None and options.reference_names is None and options.preset == "pilot_talking_keyframe":
+        from .characters.references import context_for_preset, select_references
+
+        selection = select_references(
+            character.profile,
+            scene=None,
+            context=context_for_preset(options.preset),
+            max_references=max_references,
+        )
+        return tuple(
+            ReferenceImage(
+                name=item.logical_name,
+                path=config.root / item.path,
+                role=item.role,
+                tag=item.tag,
+                sha256=item.sha256,
+                mime_type=character.profile.references[item.logical_name].mime_type,
+                slot=index,
+                semantic_role=f"character_{item.logical_name}",
+                source_type="active_character_authority",
+                width=character.profile.references[item.logical_name].width,
+                height=character.profile.references[item.logical_name].height,
+            )
+            for index, item in enumerate(selection.references, start=1)
+        )
+
+    return tuple(
+        ReferenceImage(
+            name=anchor.name,
+            path=config.root / anchor.path,
+            role=anchor.role,
+            tag=anchor.tag,
+            sha256=anchor.sha256,
+            mime_type=anchor.mime_type,
+            slot=index,
+            semantic_role=anchor.role,
+            source_type="approved_anchor",
+            width=anchor.width,
+            height=anchor.height,
+        )
+        for index, anchor in enumerate(
+            (reference_catalog[name] for name in reference_names), start=1
+        )
+    )
 
 
 def _create_provider(
@@ -569,10 +655,15 @@ def validate_project(project_root: Path) -> dict[str, object]:
     prompts: dict[str, str] = {}
     for preset in config.presets.values():
         refs = tuple(reference_catalog[name] for name in preset.references)
+        selected_tags = {item.tag for item in refs}
+        if preset.name == "pilot_home_keyframe":
+            selected_tags = {"lala_face", "lala_look", "henry_scene"}
+        elif preset.name == "pilot_product_keyframe":
+            selected_tags = {"lala_face", "henry_scene", "henry_product"}
         prompt = load_prompt(
             config.root,
             preset.prompt_file,
-            selected_tags={item.tag for item in refs},
+            selected_tags=selected_tags,
             max_utf16_units=capabilities.prompt_utf16_max,
         )
         prompts[preset.name] = prompt.sha256
@@ -638,6 +729,23 @@ def _write_input_artifacts(
                 }
                 for name, item in all_anchors.items()
             },
+            "references": [
+                {
+                    "slot": reference.slot,
+                    "name": reference.name,
+                    "semantic_role": reference.semantic_role,
+                    "source_type": reference.source_type,
+                    "path": reference.path,
+                    "sha256": reference.sha256,
+                    "mime_type": reference.mime_type,
+                    "width": reference.width,
+                    "height": reference.height,
+                    "tag": reference.tag,
+                    "source_url": reference.source_url,
+                    "sku": reference.sku,
+                }
+                for reference in (requests[0].references if requests else ())
+            ],
         },
     )
 

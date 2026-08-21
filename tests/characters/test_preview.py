@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import shutil
+from types import SimpleNamespace
 
 import pytest
 from PIL import Image
 
 from lala_workflow.characters.domain import CharacterStatus
-from lala_workflow.characters.preview import GeneratedPreview
+from lala_workflow.characters.preview import GeneratedPreview, StaticRunnerPreviewOperation
 from lala_workflow.characters.errors import PreviewUnavailableError
 from lala_workflow.characters.service import CharacterService
 
@@ -111,3 +112,30 @@ def test_partial_failure_preserves_static_preview(project_root, character_upload
     assert retried.static_preview is not None
     assert retried.static_preview.path != first_path
     assert (project_root / first_path).is_file()
+
+
+def test_static_preview_cost_is_explicitly_unknown_when_provider_exposes_no_billing(
+    project_root, character_uploads, monkeypatch
+) -> None:
+    service = CharacterService(project_root)
+    profile = service.import_character(character_uploads, created_by="test")
+    build = service.build(profile.character_id)
+    output = project_root / "static-provider-output.png"
+    Image.new("RGB", (128, 192), "purple").save(output)
+    outcome = SimpleNamespace(
+        run_id="STATIC-RUN",
+        result=SimpleNamespace(
+            outputs=(SimpleNamespace(file=output.relative_to(project_root)),),
+            tasks=({"provider_task_id": "static-task"},),
+            requests=({"prompt": {"sha256": "a" * 64}, "references": ()},),
+            status=SimpleNamespace(value="SUCCEEDED"),
+        ),
+    )
+    monkeypatch.setattr("lala_workflow.runner.run_generation", lambda *_a, **_k: outcome)
+    generated = StaticRunnerPreviewOperation(
+        project_root,
+        environment={"RUNWAY_ALLOW_LIVE_CALLS": "true", "RUNWAYML_API_SECRET": "fixture"},
+    ).generate(profile, build, project_root / "unused.png")
+    assert generated.provenance["cost_status"] == "UNKNOWN_NOT_EXPOSED_BY_PROVIDER"
+    assert generated.provenance["estimated_credits"] is None
+    assert generated.provenance["estimated_usd"] is None

@@ -13,7 +13,13 @@ import yaml
 from ..domain import to_primitive, utc_now
 from ..hashing import sha256_file
 from ..redaction import sanitize
-from .domain import CharacterBuild, CharacterProfile, CharacterReference, profile_payload
+from .domain import (
+    CharacterBuild,
+    CharacterProfile,
+    CharacterReference,
+    MotionOperationRecord,
+    profile_payload,
+)
 from .errors import CharacterIntegrityError
 from .validation import ValidatedUpload, reference_from_validated, validate_reference_file
 
@@ -109,6 +115,34 @@ class CharacterStorage:
         if not isinstance(raw, Mapping):
             raise CharacterIntegrityError("latest character build must be an object")
         return CharacterBuild.from_dict(raw)
+
+    def motion_operation_path(self, character_id: str, request_fingerprint: str) -> Path:
+        return self.outputs_root / character_id / "operations" / f"motion-{request_fingerprint}.json"
+
+    def load_motion_operation(
+        self, character_id: str, request_fingerprint: str
+    ) -> MotionOperationRecord | None:
+        path = self.motion_operation_path(character_id, request_fingerprint)
+        if not path.is_file():
+            return None
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise CharacterIntegrityError("motion operation state is unreadable") from exc
+        if not isinstance(raw, Mapping):
+            raise CharacterIntegrityError("motion operation state must be an object")
+        record = MotionOperationRecord.from_dict(raw)
+        if record.character_id != character_id or record.request_fingerprint != request_fingerprint:
+            raise CharacterIntegrityError("motion operation identity mismatch")
+        return record
+
+    def write_motion_operation(self, record: MotionOperationRecord) -> Path:
+        path = self.motion_operation_path(record.character_id, record.request_fingerprint)
+        payload = sanitize(to_primitive(record), self.secrets)
+        self._atomic_replace_text(
+            path, json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True) + "\n"
+        )
+        return path
 
     def append_event(self, character_id: str, event: str, details: Mapping[str, Any]) -> Path:
         root = self.outputs_root / character_id / "provenance"

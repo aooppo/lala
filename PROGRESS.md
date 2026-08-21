@@ -1033,3 +1033,28 @@
   `b39392cd134ac80470c259419510d8dfd763b2c776a5ef48f0f8875169b1e908`.
   Provider accounting: Runway HTTP **0**, Runway tasks **0**, HeyGen HTTP **0**, submissions **0**,
   paid calls **0**. Promotion and Product Page ready dry-run await explicit Owner Human review.
+
+## Candidate 16 motion recovery reliability repair
+
+- Preserved and reused the successful Candidate 16 static preview from Runway task
+  `add5f95c-f1f4-43ed-9492-b35e6d6c61dc`; its SHA-256 remains
+  `17853872ba54c9e0855c5aa19797a411b2ccdabda3d14c59932394f89dfdcafe` at 1088×1456. No
+  replacement static request was made. Static preview accounting now records
+  `UNKNOWN_NOT_EXPOSED_BY_PROVIDER` instead of presenting an unqualified unknown as actual cost.
+- Reconciled the earlier Candidate 16 motion attempt as `SUBMISSION_STATE_UNKNOWN`: no durable
+  task/request ID, provider rejection, acceptance, credits, or cost evidence exists. The runtime
+  motion operation is atomically persisted as `SUBMISSION_UNKNOWN`, so the motion-only CLI returns
+  `BLOCKED_SUBMISSION_UNKNOWN` before `provider.submit()` and cannot duplicate the ambiguous task.
+- Added deterministic request fingerprinting, PREPARED/SUBMITTING/SUBMITTED/POLLING/terminal
+  lifecycle records, immediate Runway task-ID persistence callback, atomic runtime writes, polling
+  and download resume, successful artifact reuse, 4xx/5xx classification, timeout/task preservation,
+  zero automatic paid retries, and the isolated `character motion-recover` command. The command
+  never invokes the static generator.
+- Verification: focused character/Runway/recovery suite **55 passed**; complete offline suite
+  **316 passed in 54.75s**; compileall, `lala-workflow validate`, and `git diff --check` passed.
+  Owner originals remain 15/15 hash-identical, Candidate authority staging and all approved-source
+  hashes remain unchanged, active character remains `lala-v1`, and Candidate 16 was not activated.
+- Provider accounting for this repair: new Runway generation submissions **0**, automatic paid
+  retries **0**. The earlier static task exists and its actual provider charge is not exposed in
+  local evidence; acceptance and cost for the earlier motion attempt remain unknown. No motion MP4
+  or Human Review Package exists, so the current state is `BLOCKED_SUBMISSION_UNKNOWN`.

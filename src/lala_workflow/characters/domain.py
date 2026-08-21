@@ -33,6 +33,19 @@ class CharacterStatus(str, Enum):
     REJECTED = "REJECTED"
 
 
+class MotionOperationState(str, Enum):
+    PREPARED = "PREPARED"
+    SUBMITTING = "SUBMITTING"
+    SUBMITTED = "SUBMITTED"
+    POLLING = "POLLING"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED_BEFORE_SUBMISSION = "FAILED_BEFORE_SUBMISSION"
+    PROVIDER_REJECTED = "PROVIDER_REJECTED"
+    PROVIDER_FAILED = "PROVIDER_FAILED"
+    SUBMISSION_UNKNOWN = "SUBMISSION_UNKNOWN"
+    DOWNLOAD_FAILED = "DOWNLOAD_FAILED"
+
+
 ALLOWED_TRANSITIONS: Mapping[CharacterStatus, frozenset[CharacterStatus]] = {
     CharacterStatus.DRAFT: frozenset({CharacterStatus.VALIDATING, CharacterStatus.BUILDING}),
     CharacterStatus.VALIDATING: frozenset({CharacterStatus.BUILDING, CharacterStatus.FAILED}),
@@ -375,6 +388,122 @@ class CharacterBuild:
             subject_lock=(dict(raw["subject_lock"]) if isinstance(raw.get("subject_lock"), Mapping) else None),
             errors=tuple(raw.get("errors") or ()),
             events_path=(Path(str(raw["events_path"])) if raw.get("events_path") else None),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class MotionOperationRecord:
+    operation_id: str
+    request_fingerprint: str
+    provider: str
+    model: str
+    purpose: str
+    character_id: str
+    source_ids: tuple[str, ...]
+    source_sha256: Mapping[str, str]
+    motion_source_sha256: str
+    prompt_sha256: str
+    duration_seconds: int
+    resolution: str
+    credit_cap: float
+    usd_cap: float
+    attempt: int
+    automatic_retry: int
+    state: MotionOperationState
+    prepared_at: str
+    submission_started_at: str | None = None
+    submission_completed_at: str | None = None
+    provider_task_id: str | None = None
+    provider_request_id: str | None = None
+    last_status: str | None = None
+    last_polled_at: str | None = None
+    estimated_credits: float | None = None
+    estimated_cost: float | None = None
+    actual_credits: float | None = None
+    actual_cost: float | None = None
+    provider_output_urls: tuple[str, ...] = ()
+    artifact_path: Path | None = None
+    artifact_sha256: str | None = None
+    error_stage: str | None = None
+    error_category: str | None = None
+    sanitized_error: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.operation_id or not HASH_RE.fullmatch(self.request_fingerprint):
+            raise CharacterIntegrityError("motion operation identity is invalid")
+        if not CHARACTER_ID_RE.fullmatch(self.character_id):
+            raise CharacterIntegrityError("motion operation character ID is invalid")
+        for digest in (*self.source_sha256.values(), self.motion_source_sha256, self.prompt_sha256):
+            if not HASH_RE.fullmatch(str(digest)):
+                raise CharacterIntegrityError("motion operation source digest is invalid")
+        if self.duration_seconds <= 0 or not self.resolution or self.attempt < 0:
+            raise CharacterIntegrityError("motion operation request fields are invalid")
+        if self.automatic_retry != 0 or self.credit_cap <= 0 or self.usd_cap <= 0:
+            raise CharacterIntegrityError("motion operation safety bounds are invalid")
+        _timestamp(self.prepared_at, "motion operation prepared_at")
+        for name, value in (
+            ("submission_started_at", self.submission_started_at),
+            ("submission_completed_at", self.submission_completed_at),
+            ("last_polled_at", self.last_polled_at),
+        ):
+            if value is not None:
+                _timestamp(value, f"motion operation {name}")
+        if self.artifact_path is not None and (
+            self.artifact_path.is_absolute() or ".." in self.artifact_path.parts
+        ):
+            raise CharacterIntegrityError("motion operation artifact path must be project-relative")
+        if self.artifact_sha256 is not None and not HASH_RE.fullmatch(self.artifact_sha256):
+            raise CharacterIntegrityError("motion operation artifact digest is invalid")
+        if self.state in {
+            MotionOperationState.SUBMITTED,
+            MotionOperationState.POLLING,
+            MotionOperationState.SUCCEEDED,
+            MotionOperationState.PROVIDER_FAILED,
+            MotionOperationState.DOWNLOAD_FAILED,
+        } and not self.provider_task_id:
+            raise CharacterIntegrityError("motion operation state requires a provider task ID")
+        if self.state is MotionOperationState.SUCCEEDED and (
+            self.artifact_path is None or self.artifact_sha256 is None
+        ):
+            raise CharacterIntegrityError("successful motion operation requires artifact evidence")
+
+    @classmethod
+    def from_dict(cls, raw: Mapping[str, Any]) -> MotionOperationRecord:
+        return cls(
+            operation_id=str(raw.get("operation_id") or ""),
+            request_fingerprint=str(raw.get("request_fingerprint") or ""),
+            provider=str(raw.get("provider") or ""),
+            model=str(raw.get("model") or ""),
+            purpose=str(raw.get("purpose") or ""),
+            character_id=str(raw.get("character_id") or ""),
+            source_ids=tuple(str(value) for value in raw.get("source_ids") or ()),
+            source_sha256={str(k): str(v) for k, v in dict(raw.get("source_sha256") or {}).items()},
+            motion_source_sha256=str(raw.get("motion_source_sha256") or ""),
+            prompt_sha256=str(raw.get("prompt_sha256") or ""),
+            duration_seconds=int(raw.get("duration_seconds") or 0),
+            resolution=str(raw.get("resolution") or ""),
+            credit_cap=float(raw.get("credit_cap") or 0),
+            usd_cap=float(raw.get("usd_cap") or 0),
+            attempt=int(raw.get("attempt") or 0),
+            automatic_retry=int(raw.get("automatic_retry") or 0),
+            state=MotionOperationState(str(raw.get("state") or "")),
+            prepared_at=str(raw.get("prepared_at") or ""),
+            submission_started_at=(str(raw["submission_started_at"]) if raw.get("submission_started_at") else None),
+            submission_completed_at=(str(raw["submission_completed_at"]) if raw.get("submission_completed_at") else None),
+            provider_task_id=(str(raw["provider_task_id"]) if raw.get("provider_task_id") else None),
+            provider_request_id=(str(raw["provider_request_id"]) if raw.get("provider_request_id") else None),
+            last_status=(str(raw["last_status"]) if raw.get("last_status") else None),
+            last_polled_at=(str(raw["last_polled_at"]) if raw.get("last_polled_at") else None),
+            estimated_credits=(float(raw["estimated_credits"]) if raw.get("estimated_credits") is not None else None),
+            estimated_cost=(float(raw["estimated_cost"]) if raw.get("estimated_cost") is not None else None),
+            actual_credits=(float(raw["actual_credits"]) if raw.get("actual_credits") is not None else None),
+            actual_cost=(float(raw["actual_cost"]) if raw.get("actual_cost") is not None else None),
+            provider_output_urls=tuple(str(value) for value in raw.get("provider_output_urls") or ()),
+            artifact_path=(Path(str(raw["artifact_path"])) if raw.get("artifact_path") else None),
+            artifact_sha256=(str(raw["artifact_sha256"]) if raw.get("artifact_sha256") else None),
+            error_stage=(str(raw["error_stage"]) if raw.get("error_stage") else None),
+            error_category=(str(raw["error_category"]) if raw.get("error_category") else None),
+            sanitized_error=(str(raw["sanitized_error"]) if raw.get("sanitized_error") else None),
         )
 
 

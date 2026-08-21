@@ -13,6 +13,7 @@ from ..video.downloads import inspect_video
 from .domain import CharacterBuild, CharacterProfile, CharacterStatus, PreviewArtifact
 from .errors import CharacterIntegrityError, PreviewUnavailableError
 from .storage import CharacterStorage
+from .motion_recovery import MotionOperationExecutor
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,6 +163,57 @@ class PreviewCoordinator:
         self._validate_artifact_path(build.static_preview)
         self._validate_artifact_path(build.motion_preview)
 
+    def recover_motion(
+        self,
+        profile: CharacterProfile,
+        build: CharacterBuild,
+        *,
+        live: bool,
+        legacy_submission_unknown: bool,
+    ) -> CharacterBuild:
+        if not live:
+            raise PreviewUnavailableError("motion recovery requires explicit --live")
+        if build.static_preview is None:
+            raise CharacterIntegrityError("motion recovery requires the existing static preview")
+        self._validate_artifact_path(build.static_preview)
+        if build.motion_preview is not None:
+            self._validate_artifact_path(build.motion_preview)
+            return build
+        if self.motion_operation is None:
+            raise PreviewUnavailableError("motion preview operation is not configured")
+        preflight = getattr(self.motion_operation, "preflight", None)
+        if callable(preflight):
+            preflight()
+        recover = getattr(self.motion_operation, "recover", None)
+        if not callable(recover):
+            raise PreviewUnavailableError("motion preview operation does not support recovery")
+        destination = self.storage.preview_root(profile.character_id) / (
+            f"{build.build_id}-motion-recovery.mp4"
+        )
+        generated = recover(
+            profile,
+            build,
+            build.static_preview,
+            destination,
+            legacy_submission_unknown=legacy_submission_unknown,
+        )
+        motion = self._store_motion(profile, generated, destination)
+        subject_lock = dict(generated.subject_lock or {})
+        if subject_lock:
+            subject_lock.setdefault("authority", "diagnostic_only_not_automatic_approval")
+        return replace(
+            build,
+            status=CharacterStatus.READY_FOR_APPROVAL,
+            motion_preview=motion,
+            technical_checks={
+                **dict(build.technical_checks),
+                "static_preview": "PASS_REUSED",
+                "motion_preview": "PASS",
+                "preview_pipeline": "PASS_RECOVERED",
+            },
+            subject_lock=subject_lock or None,
+        )
+
     def _store_static(
         self, profile: CharacterProfile, generated: GeneratedPreview, target: Path
     ) -> PreviewArtifact:
@@ -295,6 +347,11 @@ class StaticRunnerPreviewOperation:
                     for item in references or ()
                     if isinstance(item, Mapping)
                 },
+                "model": "gen4_image",
+                "cost_status": "UNKNOWN_NOT_EXPOSED_BY_PROVIDER",
+                "pricing_contract": "configs/generation.yaml",
+                "estimated_credits": None,
+                "estimated_usd": None,
             },
         )
 
@@ -309,11 +366,13 @@ class RunwayMotionPreviewOperation:
         environment: Mapping[str, str] | None = None,
         max_runway_credits: float = 25.0,
         provider: Any | None = None,
+        storage: CharacterStorage | None = None,
     ) -> None:
         self.root = project_root.resolve()
         self.environment = dict(os.environ if environment is None else environment)
         self.max_runway_credits = max_runway_credits
         self.provider = provider
+        self.storage = storage or CharacterStorage(self.root)
 
     def preflight(self) -> None:
         if self.environment.get("VIDEO_ALLOW_LIVE_CALLS") != "true":
@@ -333,6 +392,40 @@ class RunwayMotionPreviewOperation:
         build: CharacterBuild,
         static_preview: PreviewArtifact,
         destination: Path,
+    ) -> GeneratedPreview:
+        return self._generate(
+            profile,
+            build,
+            static_preview,
+            destination,
+            legacy_submission_unknown=False,
+        )
+
+    def recover(
+        self,
+        profile: CharacterProfile,
+        build: CharacterBuild,
+        static_preview: PreviewArtifact,
+        destination: Path,
+        *,
+        legacy_submission_unknown: bool,
+    ) -> GeneratedPreview:
+        return self._generate(
+            profile,
+            build,
+            static_preview,
+            destination,
+            legacy_submission_unknown=legacy_submission_unknown,
+        )
+
+    def _generate(
+        self,
+        profile: CharacterProfile,
+        build: CharacterBuild,
+        static_preview: PreviewArtifact,
+        destination: Path,
+        *,
+        legacy_submission_unknown: bool,
     ) -> GeneratedPreview:
         from ..hashing import sha256_file
         from ..providers.runway_video import RunwayMotionProvider
@@ -369,36 +462,43 @@ class RunwayMotionPreviewOperation:
         provider = self.provider or RunwayMotionProvider(
             definition, api_key=str(self.environment["RUNWAYML_API_SECRET"])
         )
-        provider.validate_request(request)
-        # A task ID is an idempotency boundary: submit exactly once, then only poll/download it.
-        task_id = provider.submit(request)
-        result = provider.wait(task_id, request.timeout_seconds)
-        if result.status is not VideoTaskStatus.SUCCEEDED:
-            raise PreviewUnavailableError(
-                f"motion preview provider task did not succeed: {result.status.value}"
-            )
-        artifacts = provider.download_results(
-            result,
-            destination.parent,
-            destination.stem,
-            config.limits.download_timeout_seconds,
-            config.limits.max_retries,
+        credit_usd = float(definition.settings.get("credit_usd") or 0.01)
+        outcome = MotionOperationExecutor(
+            self.root,
+            self.storage,
+            credit_cap=self.max_runway_credits,
+            credit_usd=credit_usd,
+        ).execute(
+            profile=profile,
+            static_preview=static_preview,
+            request=request,
+            provider=provider,
+            destination=destination,
+            legacy_submission_unknown=legacy_submission_unknown,
         )
-        if len(artifacts) != 1:
-            raise PreviewUnavailableError("motion preview did not produce exactly one result")
-        artifact = artifacts[0]
-        if result.actual_credits is not None and result.actual_credits > self.max_runway_credits:
+        artifact = outcome.artifact
+        operation = outcome.operation
+        if operation.actual_credits is not None and operation.actual_credits > self.max_runway_credits:
             raise PreviewUnavailableError("motion preview actual credits exceeded the explicit cap")
         return GeneratedPreview(
             artifact.path,
             source_run_id=build.build_id,
-            provider_task_id=task_id,
+            provider_task_id=operation.provider_task_id,
             provenance={
                 "model": "gen4_turbo",
                 "duration_seconds": 5,
                 "prompt_sha256": prompt.sha256,
                 "static_preview_sha256": static_preview.sha256,
                 "max_runway_credits": self.max_runway_credits,
-                "actual_runway_credits": result.actual_credits,
+                "operation_id": operation.operation_id,
+                "request_fingerprint": operation.request_fingerprint,
+                "estimated_runway_credits": operation.estimated_credits,
+                "actual_runway_credits": operation.actual_credits,
+                "estimated_usd": operation.estimated_cost,
+                "actual_usd": operation.actual_cost,
+                "cost_status": (
+                    "ACTUAL" if operation.actual_cost is not None else "ESTIMATED"
+                ),
+                "automatic_paid_retry": 0,
             },
         )

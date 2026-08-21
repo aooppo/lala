@@ -16,7 +16,11 @@ from .reporting import promote_keyframe, read_run_summary
 from .runner import LiveCallBlocked, RunOptions, run_generation, validate_project
 from .video import cli as video_cli
 from .video.validation import ExternalInputBlocked
-from .characters.errors import CharacterError, PreviewUnavailableError
+from .characters.errors import (
+    CharacterError,
+    MotionSubmissionUnknownError,
+    PreviewUnavailableError,
+)
 from .characters.validation import DEFAULT_MAX_UPLOAD_BYTES
 from .redaction import sanitize
 
@@ -77,6 +81,13 @@ def build_parser() -> argparse.ArgumentParser:
     character_preview.add_argument("--live", action="store_true")
     character_preview.add_argument("--max-runway-credits", type=float)
     character_preview.add_argument("--project-root", type=Path, default=Path.cwd())
+    character_motion_recover = character_commands.add_parser(
+        "motion-recover", help="resume or safely recover motion without regenerating static preview"
+    )
+    character_motion_recover.add_argument("character_id")
+    character_motion_recover.add_argument("--live", action="store_true")
+    character_motion_recover.add_argument("--max-runway-credits", type=float, required=True)
+    character_motion_recover.add_argument("--project-root", type=Path, default=Path.cwd())
     character_activate = character_commands.add_parser("activate", help="approve and activate")
     character_activate.add_argument("character_id")
     character_activate.add_argument("--project-root", type=Path, default=Path.cwd())
@@ -160,6 +171,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print(json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True))
             return exit_code
         raise ValueError(f"unknown command: {args.command}")
+    except MotionSubmissionUnknownError as exc:
+        print(f"BLOCKED_SUBMISSION_UNKNOWN: {redact_text(str(exc))}", file=sys.stderr)
+        return 4
     except (LiveCallBlocked, ExternalInputBlocked, PreviewUnavailableError) as exc:
         print(f"BLOCKED_EXTERNAL: {redact_text(str(exc))}", file=sys.stderr)
         return 4
@@ -207,6 +221,10 @@ def _handle_character(args):
         if args.max_runway_credits is not None and not args.live:
             raise ValueError("--max-runway-credits is valid only with --live")
         return service.preview(args.character_id, live=bool(args.live))
+    if command == "motion-recover":
+        if not args.live:
+            raise ValueError("motion-recover requires explicit --live")
+        return service.recover_motion(args.character_id, live=True)
     if command == "activate":
         return service.approve_and_activate(
             args.character_id, expected_revision=args.expected_revision

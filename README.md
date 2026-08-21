@@ -74,6 +74,20 @@ not create fake media and cannot satisfy activation. A real preview additionally
 gates are preflighted before the first paid call. No live call is part of installation, testing,
 dry runs, or this delivery.
 
+If static succeeds but motion is interrupted, never rerun the combined preview. Resume only with:
+
+```bash
+uv run python -m lala_workflow character motion-recover CHARACTER_ID \
+  --max-runway-credits 25 --live
+```
+
+Character motion recovery stores an atomic runtime operation under
+`outputs/characters/<id>/operations/`. Its deterministic request fingerprint binds the character
+source hashes, reused static hash, prompt hash, model, duration, and ratio. A durable submitted task
+is polled instead of resubmitted; a completed artifact is reused; and ambiguous submission state
+returns `BLOCKED_SUBMISSION_UNKNOWN`. Provider SDK retries and automatic paid replacement
+submissions remain disabled. The command never invokes static generation.
+
 After visually reviewing both preview-only artifacts:
 
 ```bash

@@ -46,7 +46,9 @@ class CharacterService:
         bootstrap: bool = True,
     ) -> None:
         self.root = project_root.resolve()
-        self.storage = CharacterStorage(self.root)
+        self.storage = CharacterStorage(
+            self.root, secrets=(str(os.environ.get("RUNWAYML_API_SECRET") or ""),)
+        )
         self.registry = CharacterRegistryStore(self.root, storage=self.storage)
         if bootstrap and not self.registry.exists():
             bootstrap_legacy_character(self.root, storage=self.storage, registry=self.registry)
@@ -55,7 +57,7 @@ class CharacterService:
         )
         static_operation = static_preview_operation or StaticRunnerPreviewOperation(self.root)
         motion_operation = motion_preview_operation or RunwayMotionPreviewOperation(
-            self.root, max_runway_credits=max_runway_credits
+            self.root, max_runway_credits=max_runway_credits, storage=self.storage
         )
         self.previews = PreviewCoordinator(
             self.root,
@@ -164,23 +166,64 @@ class CharacterService:
             {"build_id": result.build_id, "status": result.status.value, "live": live},
         )
         if result.status is CharacterStatus.READY_FOR_APPROVAL:
-            profile = view.profile.transition(CharacterStatus.READY_FOR_PREVIEW)
+            self._mark_preview_ready(view.profile, result)
+        return result
+
+    def recover_motion(self, character_id: str, *, live: bool = False):
+        view = self.show(character_id)
+        build = view.build
+        if view.is_active or build is None or build.static_preview is None:
+            raise CharacterStateError("character has no staging static preview to recover")
+        if view.profile.status not in {
+            CharacterStatus.READY_FOR_GENERATION,
+            CharacterStatus.READY_FOR_PREVIEW,
+            CharacterStatus.FAILED,
+        }:
+            raise CharacterStateError("character is not eligible for motion-only recovery")
+        legacy_unknown = (
+            build.status is CharacterStatus.FAILED
+            and build.motion_preview is None
+            and any(str(item.get("code")) == "preview_failed" for item in build.errors)
+        )
+        result = self.previews.recover_motion(
+            view.profile,
+            build,
+            live=live,
+            legacy_submission_unknown=legacy_unknown,
+        )
+        self.storage.write_build(result)
+        self.storage.append_event(
+            character_id,
+            "motion_preview_recovered",
+            {"build_id": result.build_id, "status": result.status.value, "live": live},
+        )
+        if result.status is CharacterStatus.READY_FOR_APPROVAL:
+            self._mark_preview_ready(view.profile, result)
+        return result
+
+    def _mark_preview_ready(self, source_profile: CharacterProfile, result):
+        profile = source_profile
+        if profile.status is CharacterStatus.READY_FOR_GENERATION:
+            profile = profile.transition(CharacterStatus.READY_FOR_PREVIEW)
+        if profile.status is CharacterStatus.READY_FOR_PREVIEW:
             profile = profile.transition(
                 CharacterStatus.READY_FOR_APPROVAL,
                 build_id=result.build_id,
                 static_preview_sha256=result.static_preview.sha256 if result.static_preview else None,
                 motion_preview_sha256=result.motion_preview.sha256 if result.motion_preview else None,
             )
-            profile, path = self.storage.write_profile(profile)
-            registry = self.registry.load()
-            self.registry.update_profile(
-                profile,
-                path,
-                event_type="preview_ready",
-                expected_revision=registry.revision,
-                expected_active=registry.active_character,
-            )
-        return result
+        if profile.status is not CharacterStatus.READY_FOR_APPROVAL:
+            raise CharacterStateError("character profile cannot enter preview approval state")
+        profile, path = self.storage.write_profile(profile)
+        registry = self.registry.load()
+        self.registry.update_profile(
+            profile,
+            path,
+            event_type="preview_ready",
+            expected_revision=registry.revision,
+            expected_active=registry.active_character,
+        )
+        return profile
 
     def approve_and_activate(
         self, character_id: str, *, expected_revision: int | None = None

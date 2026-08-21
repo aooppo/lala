@@ -29,6 +29,7 @@ class RunwayMotionProvider:
         monotonic: Callable[[], float] = time.monotonic,
         downloader: Downloader | None = None,
         max_poll_retries: int = 2,
+        task_created_sink: Callable[[str, str | None, float | None], None] | None = None,
     ) -> None:
         if definition.name != "runway" or definition.responsibility != "motion":
             raise ValueError("RunwayMotionProvider requires the Runway motion definition")
@@ -52,6 +53,12 @@ class RunwayMotionProvider:
         self.max_poll_retries = max_poll_retries
         self._estimated_credits: dict[str, float] = {}
         self.http_request_count = 0
+        self.task_created_sink = task_created_sink
+
+    def set_task_created_sink(
+        self, sink: Callable[[str, str | None, float | None], None] | None
+    ) -> None:
+        self.task_created_sink = sink
 
     def validate_request(self, request: MotionVideoRequest) -> None:
         if request.provider != "runway":
@@ -129,6 +136,9 @@ class RunwayMotionProvider:
         credits = getattr(estimate, "credits", None)
         if credits is not None:
             self._estimated_credits[task_id] = float(credits)
+        if self.task_created_sink is not None:
+            # Persist the durable provider identity before returning control to a coordinator.
+            self.task_created_sink(task_id, None, float(credits) if credits is not None else None)
         return task_id
 
     def wait(self, task_id: str, timeout_seconds: float) -> VideoTaskResult:

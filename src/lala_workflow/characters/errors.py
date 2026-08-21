@@ -53,6 +53,10 @@ class PreviewUnavailableError(CharacterError):
         )
 
 
+class MotionSubmissionUnknownError(PreviewUnavailableError):
+    code = "motion_submission_unknown"
+
+
 def upload_message(role: str, reason: str) -> str:
     label = ROLE_LABELS.get(role, "人物素材")
     messages = {

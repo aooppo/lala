@@ -973,3 +973,63 @@
   `git diff --check` passed. Approved-source and historical V7 evidence hashes remain unchanged.
   Provider accounting for this remediation: Runway HTTP **0**, HeyGen HTTP **0**, provider
   submissions **0**, paid calls **0**. No Product Page Live was executed.
+
+## Goal 2 K2 candidate intake audit and talking-keyframe parity
+
+- Audited three owner-supplied K2 images under `tmp/k2_candidates/` without copying them into an
+  approved-source directory or fabricating generation/human-review provenance. The current CLI has
+  no external-keyframe candidate import/review/promotion contract: static promotion requires a
+  genuine Goal 1 run/request/result/prompt chain, while `owner_supplied_legacy_asset` is an audited
+  already-approved source-package path and cannot represent an unreviewed candidate.
+- Talking workflows for Product Page, Tooltip, and Homepage now require an independently approved
+  `talking_medium_closeup` role in both dry-run and live modes. Missing-role checks run before run
+  allocation and before real provider construction, including when a provider mapping is injected
+  by tests; the full-body home-context keyframe no longer satisfies any talking entry point.
+- Focused Product Page/dry-run/generation tests **25 passed** and the complete offline suite
+  **290 passed in 50.95s**. Direct Product Page dry-run and live fail-closed checks both exited 4
+  with run count unchanged at 10. Provider accounting: Runway HTTP **0**, HeyGen HTTP **0**,
+  submissions **0**, paid calls **0**.
+
+## Goal 2 external K2 workflow — documentation continuation
+
+- Recovered the interrupted Track B session and completed the active Spec Kit design set under
+  `specs/008-external-k2-workflow/`: explicit scope/NFRs, architecture and multi-file failure
+  boundaries, security/privacy rules, compatibility, evidence, rollback, full data schemas, CLI
+  contracts, runnable Owner handoff, dependency-ordered tasks, and FR/NFR/SC traceability.
+- Documentation deliberately records the feature as implementation-in-progress. The focused
+  external-keyframe/pilot/dry-run command currently reports **18 passed, 8 failed**; failures cover
+  duplicate K2 fixture authority, resolver fixture/order conflicts, V7/talking keyframe parity,
+  and one promotion fixture collision. T003–T016 remain unchecked until independent verification
+  is green.
+- The real candidate was not imported through the new workflow, no review value was filled, no
+  promotion ran, and no approved source or manifest was changed by this documentation checkpoint.
+  Ordered approved-source hash-list digest remains
+  `b39392cd134ac80470c259419510d8dfd763b2c776a5ef48f0f8875169b1e908`.
+  Provider accounting: Runway HTTP **0**, Runway tasks **0**, HeyGen HTTP **0**, provider
+  submissions **0**, paid calls **0**.
+
+## Goal 2 external K2 workflow — implementation and pending Owner review
+
+- Implemented `video keyframe import-candidate` and `promote-candidate` with dedicated external
+  provenance, exact-byte exclusive staging/promotion, bounded PNG/JPEG validation, source/review/
+  staged symlink and traversal rejection, one-row versioned blank Human QA, candidate/hash-bound
+  review validation, timezone-aware attribution, collision protection, and handled-failure cleanup.
+- Split pilot keyframe authority end to end: Product Page/Tooltip/Homepage talking resolves unique
+  `talking_medium_closeup` K2, while motion/B-roll/V7 resolves unchanged `pilot_home_context` K1
+  (with `establishing_keyframe` fallback). New request/resolved evidence records both independently;
+  historical single-keyframe readers remain compatible.
+- Focused external/media/preflight/dry-run suites passed **39 tests**; broader video coverage passed
+  **68 tests**; complete offline suite passed **302 tests in 53.60s**. Compileall, Goal 2 validation,
+  `git diff --check`, requirement traceability, and precise credential/signed-URL scans passed.
+- Imported real candidate `k2-owner-20260821-01` by exact bytes only. Source and staged SHA-256 are
+  both `111811f7d501850e0ddd2cd4dca1cf4f595453e68c83a987f52c96ecbb488ea6`; candidate provenance SHA
+  is `4807befaa7eb3f35d8f8051baf6cf9eb3b57ef737e9f4bbe69175f2451ce2082`; blank review SHA is
+  `fb02a32ddaad51a4f78c2e9ff93cda377ce8283d206062bdb52f0d6886c36bd4`, with one row and zero
+  nonblank Human fields. Status is `READY_FOR_K2_HUMAN_REVIEW`.
+- The unapproved-candidate Product Page dry-run failed closed with exit 4 before run allocation;
+  run count stayed 10. No review PASS was supplied, no promotion ran, and keyframe manifest SHA
+  remains `8b9e4eb1eea4222eb20b6b97bdd7f697f9d096573274b706bd6732064ca3a7b5`.
+- Approved-source ordered digest remains
+  `b39392cd134ac80470c259419510d8dfd763b2c776a5ef48f0f8875169b1e908`.
+  Provider accounting: Runway HTTP **0**, Runway tasks **0**, HeyGen HTTP **0**, submissions **0**,
+  paid calls **0**. Promotion and Product Page ready dry-run await explicit Owner Human review.

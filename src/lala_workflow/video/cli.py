@@ -106,6 +106,8 @@ def configure_parser(subparsers: Any) -> None:
     generate.add_argument("--motion-smoke-review-file")
     generate.add_argument("--talking-variations", type=int)
     generate.add_argument("--motion-variations", type=int)
+    generate.add_argument("--talking-keyframe")
+    generate.add_argument("--motion-keyframe")
     generate.add_argument(
         "--max-talking-duration-seconds",
         type=float,
@@ -124,6 +126,22 @@ def configure_parser(subparsers: Any) -> None:
     )
     _project_root(talking_crop)
     talking_crop.add_argument("--source", required=True)
+    import_candidate = keyframe_commands.add_parser(
+        "import-candidate", help="stage an owner-supplied external keyframe candidate"
+    )
+    _project_root(import_candidate)
+    import_candidate.add_argument("--source", required=True)
+    import_candidate.add_argument("--candidate-id", required=True)
+    import_candidate.add_argument(
+        "--role", required=True, choices=("talking_medium_closeup",)
+    )
+    import_candidate.add_argument("--source-reference", required=True)
+    promote_candidate = keyframe_commands.add_parser(
+        "promote-candidate", help="promote a human-reviewed external keyframe candidate"
+    )
+    _project_root(promote_candidate)
+    promote_candidate.add_argument("--candidate-id", required=True)
+    promote_candidate.add_argument("--review-file", required=True)
 
     assemble = commands.add_parser("assemble", help="assemble explicitly selected shots")
     _project_root(assemble)

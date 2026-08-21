@@ -62,6 +62,8 @@ class VideoRunOptions:
     talking_variations: int | None = None
     motion_variations: int | None = None
     keyframe_id: str | None = None
+    talking_keyframe_id: str | None = None
+    motion_keyframe_id: str | None = None
     audio_override: Path | None = None
     live: bool = False
     smoke_run_id: str | None = None
@@ -123,7 +125,7 @@ def preview_video(project_root: Path, options: VideoRunOptions) -> VideoRunOutco
         raise VideoConfigError(f"unknown video preset: {options.preset}")
     preset = config.presets[options.preset]
     script = _script(config, preset.script_id)
-    keyframe = _keyframe(config, options.keyframe_id)
+    talking_keyframe, motion_keyframe = _pilot_keyframes(config, options)
     if script.script_id in config.voice_profile.script_audio:
         audio: ApprovedAudio | None = resolve_approved_audio(
             config, script, override=options.audio_override
@@ -151,7 +153,7 @@ def preview_video(project_root: Path, options: VideoRunOptions) -> VideoRunOutco
             config.root, options.smoke_run_id, options.smoke_review_file
         )
         smoke_request = _first_talking_request(smoke)
-        if smoke_request.get("keyframe_sha256") != keyframe.sha256:
+        if smoke_request.get("keyframe_sha256") != talking_keyframe.sha256:
             raise ExternalInputBlocked(
                 "passing smoke run used a different approved keyframe digest"
             )
@@ -167,7 +169,7 @@ def preview_video(project_root: Path, options: VideoRunOptions) -> VideoRunOutco
             config.root,
             options.motion_smoke_run_id,
             options.motion_smoke_review_file,
-            keyframe_sha256=keyframe.sha256,
+            keyframe_sha256=motion_keyframe.sha256,
         )
     talking_duration_limit = _talking_duration_limit(
         config, options, required=False
@@ -241,7 +243,9 @@ def preview_video(project_root: Path, options: VideoRunOptions) -> VideoRunOutco
         "validated",
         {"mode": "DRY_RUN", "provider_call_count": plan.provider_call_count},
     )
-    requests = _request_previews(run.run_id, plan, script, keyframe, audio, config)
+    requests = _request_previews(
+        run.run_id, plan, script, talking_keyframe, motion_keyframe, audio, config
+    )
     storage.write_json_new(
         run,
         "request.json",
@@ -268,7 +272,13 @@ def preview_video(project_root: Path, options: VideoRunOptions) -> VideoRunOutco
         run,
         "resolved-config.yaml",
         {
-            **_resolved_config(config, options, plan),
+            **_resolved_config(
+                config,
+                options,
+                plan,
+                talking_keyframe=talking_keyframe,
+                motion_keyframe=motion_keyframe,
+            ),
             "budget": _budget_evidence(
                 preview_budgets,
                 estimated_provider_cost,
@@ -288,7 +298,11 @@ def preview_video(project_root: Path, options: VideoRunOptions) -> VideoRunOutco
         "audio-hash.json",
         to_primitive(audio) if audio is not None else _planned_voice_evidence(config, script, run.run_id),
     )
-    storage.write_json_new(run, "keyframe-hash.json", _keyframe_evidence(keyframe, config))
+    storage.write_json_new(
+        run,
+        "keyframe-hash.json",
+        _dual_keyframe_evidence(talking_keyframe, motion_keyframe, config),
+    )
     storage.write_json_new(run, "shot-plan.json", to_primitive(plan))
     storage.write_json_new(
         run,
@@ -999,7 +1013,12 @@ def run_talking_smoke(
     if preset is None:
         raise VideoConfigError(f"unknown video preset: {options.preset}")
     script = _script(config, preset.script_id)
-    keyframe = _keyframe(config, options.keyframe_id)
+    keyframe = _resolve_keyframe_role(
+        config,
+        role="talking_medium_closeup",
+        selected=options.keyframe_id,
+        label="talking",
+    )
     provider_name = options.provider_name or preset.talking_provider
     if provider_name == "runway":
         provider_name = "runway_talking"
@@ -3051,7 +3070,7 @@ def generate_video(
     if preset is None:
         raise VideoConfigError(f"unknown video preset: {options.preset}")
     script = _script(config, preset.script_id)
-    keyframe = _keyframe(config, options.keyframe_id)
+    talking_keyframe, motion_keyframe = _pilot_keyframes(config, options)
     plan = build_shot_plan(
         config,
         options.preset,
@@ -3064,7 +3083,7 @@ def generate_video(
         config.root, options.smoke_run_id, options.smoke_review_file
     )
     smoke_request = _first_talking_request(smoke)
-    if smoke_request.get("keyframe_sha256") != keyframe.sha256:
+    if smoke_request.get("keyframe_sha256") != talking_keyframe.sha256:
         raise ExternalInputBlocked("passing smoke run used a different approved keyframe digest")
     if smoke_request.get("provider") != preset.talking_provider:
         raise ExternalInputBlocked("passing smoke run used a different talking provider")
@@ -3074,19 +3093,9 @@ def generate_video(
             config.root,
             options.motion_smoke_run_id,
             options.motion_smoke_review_file,
-            keyframe_sha256=keyframe.sha256,
+            keyframe_sha256=motion_keyframe.sha256,
         )
     _validate_full_live_guards(config, plan, environment)
-
-    if (
-        providers is None
-        and options.preset in {"product_page", "homepage"}
-        and "talking_medium_closeup" not in keyframe.roles
-    ):
-        raise ExternalInputBlocked(
-            f"{options.preset} live generation requires an approved talking_medium_closeup "
-            "keyframe role; derive-talking-crop creates only an unapproved candidate"
-        )
 
     budget_limits = _budget_limits(options)
     estimated_motion_credits = _estimate_motion_credits(config, plan)
@@ -3210,10 +3219,11 @@ def generate_video(
             options,
             plan,
             script,
-            keyframe,
+            talking_keyframe,
             storage,
             run,
             exc,
+            motion_keyframe=motion_keyframe,
             stage="voice_resolution",
             audio=audio,
             requests=failure_requests,
@@ -3279,12 +3289,19 @@ def generate_video(
         for planned in shot.requests:
             if planned.responsibility == "talking":
                 request = _talking_request(
-                    run.run_id, config, preset, planned, shot, script, keyframe, audio
+                    run.run_id,
+                    config,
+                    preset,
+                    planned,
+                    shot,
+                    script,
+                    talking_keyframe,
+                    audio,
                 )
                 output_dir = config.root / "outputs/talking_shots" / run.run_id
             else:
                 request = _motion_request(
-                    run.run_id, config, preset, planned, shot, keyframe
+                    run.run_id, config, preset, planned, shot, motion_keyframe
                 )
                 output_dir = config.root / "outputs/broll" / run.run_id
             requests.append(request)
@@ -3437,7 +3454,13 @@ def generate_video(
         run,
         "resolved-config.yaml",
         {
-            **_resolved_config(config, options, plan),
+            **_resolved_config(
+                config,
+                options,
+                plan,
+                talking_keyframe=talking_keyframe,
+                motion_keyframe=motion_keyframe,
+            ),
             "live": True,
             "smoke_run_id": options.smoke_run_id,
             "smoke_review": smoke_review_evidence,
@@ -3453,7 +3476,11 @@ def generate_video(
     storage.write_bytes_new(run, "script.txt", script.content)
     storage.write_json_new(run, "script-hash.json", _script_evidence(script))
     storage.write_json_new(run, "audio-hash.json", to_primitive(audio))
-    storage.write_json_new(run, "keyframe-hash.json", _keyframe_evidence(keyframe, config))
+    storage.write_json_new(
+        run,
+        "keyframe-hash.json",
+        _dual_keyframe_evidence(talking_keyframe, motion_keyframe, config),
+    )
     storage.write_json_new(run, "shot-plan.json", to_primitive(plan))
     storage.write_json_new(
         run,
@@ -3513,6 +3540,7 @@ def _write_failure_bundle(
     run: VideoRunContext,
     error: Exception,
     *,
+    motion_keyframe: ApprovedKeyframe | None = None,
     stage: str,
     audio: ApprovedAudio | None,
     requests: list[dict[str, Any]],
@@ -3555,7 +3583,13 @@ def _write_failure_bundle(
         run,
         "resolved-config.yaml",
         {
-            **_resolved_config(config, options, plan),
+            **_resolved_config(
+                config,
+                options,
+                plan,
+                talking_keyframe=keyframe,
+                motion_keyframe=motion_keyframe,
+            ),
             "live": True,
             "failure_stage": stage,
             **dict(context or {}),
@@ -3564,7 +3598,15 @@ def _write_failure_bundle(
     storage.write_bytes_new(run, "script.txt", script.content)
     storage.write_json_new(run, "script-hash.json", _script_evidence(script))
     storage.write_json_new(run, "audio-hash.json", audio_evidence)
-    storage.write_json_new(run, "keyframe-hash.json", _keyframe_evidence(keyframe, config))
+    storage.write_json_new(
+        run,
+        "keyframe-hash.json",
+        (
+            _dual_keyframe_evidence(keyframe, motion_keyframe, config)
+            if motion_keyframe is not None
+            else _keyframe_evidence(keyframe, config)
+        ),
+    )
     storage.write_json_new(run, "shot-plan.json", to_primitive(plan))
     storage.write_json_new(
         run,
@@ -3627,6 +3669,24 @@ def handle_video_command(args: Any) -> tuple[int, Any]:
             from .keyframes import derive_talking_crop
 
             return 0, derive_talking_crop(args.project_root, args.source)
+        if args.keyframe_command == "import-candidate":
+            from .keyframe_candidates import import_external_keyframe_candidate
+
+            return 0, import_external_keyframe_candidate(
+                args.project_root,
+                source=Path(args.source),
+                candidate_id=args.candidate_id,
+                role=args.role,
+                source_reference=args.source_reference,
+            )
+        if args.keyframe_command == "promote-candidate":
+            from .keyframe_candidates import promote_external_keyframe_candidate
+
+            return 0, promote_external_keyframe_candidate(
+                args.project_root,
+                candidate_id=args.candidate_id,
+                review_file=Path(args.review_file),
+            )
         raise ValueError(f"keyframe command is not implemented: {args.keyframe_command}")
     if args.video_command == "motion-v7-dry-run":
         outcome = preview_motion_v7(args.project_root, keyframe_id=args.keyframe)
@@ -3694,6 +3754,8 @@ def handle_video_command(args: Any) -> tuple[int, Any]:
             ),
             motion_variations=getattr(args, "motion_variations", None),
             keyframe_id=getattr(args, "keyframe", None),
+            talking_keyframe_id=getattr(args, "talking_keyframe", None),
+            motion_keyframe_id=getattr(args, "motion_keyframe", None),
             audio_override=(Path(args.audio) if getattr(args, "audio", None) else None),
             live=bool(args.live),
             smoke_run_id=getattr(args, "smoke_run_id", None),
@@ -3845,11 +3907,76 @@ def _keyframe(config: VideoProjectConfig, selected: str | None) -> ApprovedKeyfr
     return config.keyframes[sorted(config.keyframes)[0]]
 
 
+def _resolve_keyframe_role(
+    config: VideoProjectConfig,
+    *,
+    role: str,
+    selected: str | None,
+    label: str,
+) -> ApprovedKeyframe:
+    if selected:
+        candidate = _keyframe(config, selected)
+        if role not in candidate.roles:
+            raise ExternalInputBlocked(
+                f"selected {label} keyframe does not have required {role} role"
+            )
+        return candidate
+    matches = [item for item in config.keyframes.values() if role in item.roles]
+    if not matches:
+        raise ExternalInputBlocked(
+            f"{label} workflow requires an approved {role} keyframe role; "
+            "derived or external candidates remain unapproved until explicit human review "
+            "and promotion"
+        )
+    if len(matches) != 1:
+        raise ExternalInputBlocked(
+            f"{label} keyframe role {role} must resolve to exactly one approved authority"
+        )
+    return matches[0]
+
+
+def _pilot_keyframes(
+    config: VideoProjectConfig, options: VideoRunOptions
+) -> tuple[ApprovedKeyframe, ApprovedKeyframe]:
+    talking = _resolve_keyframe_role(
+        config,
+        role="talking_medium_closeup",
+        selected=options.talking_keyframe_id or options.keyframe_id,
+        label="talking",
+    )
+    motion_selection = options.motion_keyframe_id
+    if motion_selection:
+        motion = _keyframe(config, motion_selection)
+        if not ({"pilot_home_context", "establishing_keyframe"} & set(motion.roles)):
+            raise ExternalInputBlocked(
+                "selected motion keyframe requires pilot_home_context or establishing_keyframe role"
+            )
+    else:
+        pilot_matches = [
+            item for item in config.keyframes.values() if "pilot_home_context" in item.roles
+        ]
+        if pilot_matches:
+            if len(pilot_matches) != 1:
+                raise ExternalInputBlocked(
+                    "motion pilot_home_context role must resolve to exactly one approved authority"
+                )
+            motion = pilot_matches[0]
+        else:
+            motion = _resolve_keyframe_role(
+                config,
+                role="establishing_keyframe",
+                selected=None,
+                label="motion",
+            )
+    return talking, motion
+
+
 def _request_previews(
     run_id: str,
     plan: ShotPlan,
     script: ScriptRecord,
-    keyframe: ApprovedKeyframe,
+    talking_keyframe: ApprovedKeyframe,
+    motion_keyframe: ApprovedKeyframe,
     audio: ApprovedAudio | None,
     config: VideoProjectConfig,
 ) -> list[dict[str, Any]]:
@@ -3869,12 +3996,23 @@ def _request_previews(
         )
     for shot in plan.shots:
         for request in shot.requests:
+            keyframe = (
+                talking_keyframe
+                if request.responsibility == "talking"
+                else motion_keyframe
+            )
             payload = to_primitive(request)
             payload.update(
                 {
                     "run_id": run_id,
                     "script_sha256": script.sha256,
                     "keyframe_sha256": keyframe.sha256,
+                    "keyframe_id": keyframe.keyframe_id,
+                    "keyframe_role": (
+                        "talking_medium_closeup"
+                        if request.responsibility == "talking"
+                        else "pilot_home_context"
+                    ),
                     "audio_sha256": audio.sha256 if audio is not None else None,
                     "audio_source_request_id": (
                         None if audio is not None else f"{run_id}-{script.script_id}-voice"
@@ -3929,10 +4067,15 @@ def _voice_live_request_evidence(
 
 
 def _resolved_config(
-    config: VideoProjectConfig, options: VideoRunOptions, plan: ShotPlan
+    config: VideoProjectConfig,
+    options: VideoRunOptions,
+    plan: ShotPlan,
+    *,
+    talking_keyframe: ApprovedKeyframe | None = None,
+    motion_keyframe: ApprovedKeyframe | None = None,
 ) -> dict[str, Any]:
     preset = config.presets[options.preset]
-    return {
+    payload = {
         "preset": options.preset,
         "action": options.action,
         "aspect_ratio": preset.aspect_ratio,
@@ -3948,6 +4091,11 @@ def _resolved_config(
         "max_talking_duration_seconds": options.max_talking_duration_seconds,
         "live": False,
     }
+    if talking_keyframe is not None:
+        payload["talking_keyframe"] = _keyframe_evidence(talking_keyframe, config)
+    if motion_keyframe is not None:
+        payload["motion_keyframe"] = _keyframe_evidence(motion_keyframe, config)
+    return payload
 
 
 def _script_evidence(script: ScriptRecord) -> dict[str, Any]:
@@ -3972,6 +4120,21 @@ def _keyframe_evidence(
         for name, item in config.anchor_manifest.get("anchors", {}).items()
     }
     return payload
+
+
+def _dual_keyframe_evidence(
+    talking_keyframe: ApprovedKeyframe,
+    motion_keyframe: ApprovedKeyframe,
+    config: VideoProjectConfig,
+) -> dict[str, Any]:
+    talking = _keyframe_evidence(talking_keyframe, config)
+    motion = _keyframe_evidence(motion_keyframe, config)
+    return {
+        **talking,
+        "schema_version": "dual-keyframe-evidence/v1",
+        "talking_keyframe": talking,
+        "motion_keyframe": motion,
+    }
 
 
 def _create_talking_provider(

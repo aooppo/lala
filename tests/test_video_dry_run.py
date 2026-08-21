@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import csv
 import json
-import shutil
 import time
 from pathlib import Path
 
@@ -50,10 +49,10 @@ def test_run_artifacts_refuse_rewrite(video_project_root: Path) -> None:
 
 def test_verified_owner_voice_allows_production_preview_without_provider_calls() -> None:
     root = Path(__file__).resolve().parents[1]
-    outcome = preview_video(root, VideoRunOptions(preset="tooltip", action="generate"))
-    assert outcome.submission_count == 0
-    assert outcome.status == "DRY_RUN_COMPLETE"
-    shutil.rmtree(outcome.run_dir)
+    before = set((root / "runs").iterdir())
+    with pytest.raises(ExternalInputBlocked, match="approved talking_medium_closeup"):
+        preview_video(root, VideoRunOptions(preset="tooltip", action="generate"))
+    assert set((root / "runs").iterdir()) == before
 
 
 def test_video_cli_validate_and_preview_exit_contract(

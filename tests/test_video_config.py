@@ -17,7 +17,7 @@ from lala_workflow.video.validation import ExternalInputBlocked
 def test_loads_all_approved_sources_presets_and_bounds(video_project_root: Path) -> None:
     config = load_video_config(video_project_root, require_inputs=True)
     assert set(config.scripts) == {"product_page", "tooltip", "homepage"}
-    assert set(config.keyframes) == {"hero"}
+    assert set(config.keyframes) == {"hero", "talking"}
     assert set(config.presets) == {"product_page", "tooltip", "homepage"}
     assert config.limits.max_concurrency == 1
     assert config.limits.max_retries == 2

@@ -167,3 +167,63 @@ def test_validate_owner_supplied_legacy_keyframe_rejects_incomplete_or_fabricate
 
     with pytest.raises(SourceValidationError, match=match):
         validate_approved_keyframe("legacy", raw, tmp_path)
+
+
+def test_validate_external_promotion_accepts_truthful_exact_byte_provenance(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "assets/approved_keyframes/k2-owner-test-01.png"
+    path.parent.mkdir(parents=True)
+    Image.new("RGB", (72, 90), "red").save(path)
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    review_digest = "b" * 64
+    promotion = path.with_suffix(".promotion.json")
+    payload = {
+        "schema_version": "external-keyframe-promotion/v1",
+        "provenance_type": "owner_supplied_external_promotion",
+        "candidate_id": "k2-owner-test-01",
+        "role": "talking_medium_closeup",
+        "source_type": "owner_supplied_external_candidate",
+        "source_reference": "Owner-supplied external K2 fixture",
+        "source_identity": "k2.png",
+        "source_sha256": digest,
+        "staged_path": "outputs/keyframes/candidates/k2-owner-test-01/candidate.png",
+        "staged_sha256": digest,
+        "review_file": "outputs/reviews/k2-owner-test-01-review.csv",
+        "review_sha256": review_digest,
+        "reviewer": "Project owner",
+        "approved_at": "2026-08-21T12:00:00+08:00",
+        "approved_path": "assets/approved_keyframes/k2-owner-test-01.png",
+        "approved_sha256": digest,
+    }
+    promotion.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+    raw = {
+        "path": payload["approved_path"],
+        "sha256": digest,
+        "provenance_type": payload["provenance_type"],
+        "promotion_record": "assets/approved_keyframes/k2-owner-test-01.promotion.json",
+        "source_candidate_id": payload["candidate_id"],
+        "source_candidate_sha256": digest,
+        "source_reference": payload["source_reference"],
+        "review_file_sha256": review_digest,
+        "reviewer": payload["reviewer"],
+        "approved_at": payload["approved_at"],
+        "roles": ["talking_medium_closeup"],
+    }
+
+    record = validate_approved_keyframe("k2-owner-test-01", raw, tmp_path)
+
+    assert record.provenance_type == "owner_supplied_external_promotion"
+    assert record.source_candidate_sha256 == digest
+    assert record.review_file_sha256 == review_digest
+    assert record.roles == ("talking_medium_closeup",)
+
+    raw["provider"] = "runway"
+    with pytest.raises(SourceValidationError, match="fabricated"):
+        validate_approved_keyframe("k2-owner-test-01", raw, tmp_path)
+    raw.pop("provider")
+
+    payload["provider_task_id"] = "fabricated-task"
+    promotion.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+    with pytest.raises(SourceValidationError, match="fabricated"):
+        validate_approved_keyframe("k2-owner-test-01", raw, tmp_path)

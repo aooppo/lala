@@ -499,8 +499,16 @@ uv run python -m lala_workflow video keyframe derive-talking-crop \
 ```
 
 The crop and provenance go under `outputs/keyframes/derived/`; no approval or manifest promotion
-is inferred. Product-page/homepage live generation requires an independently approved
-`talking_medium_closeup` role, while Tooltip smoke may use the original pilot hero.
+is inferred. Product-page, Tooltip, and homepage talking workflows require an independently
+approved `talking_medium_closeup` role in both dry-run and live modes; the full-body pilot hero
+cannot satisfy that talking-keyframe gate.
+
+The reviewed external K2 workflow is defined under `specs/008-external-k2-workflow/`. It stages an
+owner-supplied PNG/JPEG byte for byte, creates a dedicated blank Human QA copy, and permits
+exact-byte promotion only after every required K2 field is literal `PASS` with a named reviewer and
+timezone-aware review time. K2 is talking authority only; K1 remains motion/V7 authority. The first
+real candidate is staged at `READY_FOR_K2_HUMAN_REVIEW`; it is not approved and Product Page remains
+blocked until the Owner supplies a complete reviewed copy and explicitly runs promotion.
 
 After human review, copy the assembly run’s blank `review.csv` to `outputs/reviews/`, then set
 `mtl_review_ready`, `reviewer`, and timezone-aware `reviewed_at` in the one matching row of that

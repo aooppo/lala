@@ -57,7 +57,7 @@ def _cloned_voice_config(root: Path):
 def _enable_talking_role(root: Path) -> None:
     path = root / "configs/keyframe-manifest.yaml"
     manifest = yaml.safe_load(path.read_text(encoding="utf-8"))
-    manifest["keyframes"]["hero"]["roles"] = ["hero", "talking_medium_closeup"]
+    manifest["keyframes"]["talking"]["roles"] = ["talking_medium_closeup"]
     path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
 
 
@@ -175,6 +175,7 @@ def test_product_dry_run_records_v7_and_staged_budget_without_unknown_bypass(
     request = json.loads((outcome.run_dir / "request.json").read_text())
     results = json.loads((outcome.run_dir / "provider-results.json").read_text())
     cost = json.loads((outcome.run_dir / "cost.json").read_text())
+    keyframes = json.loads((outcome.run_dir / "keyframe-hash.json").read_text())
     assert outcome.status == "DRY_RUN_COMPLETE"
     assert request["motion_smoke_review"]["selected_candidate_id"] == (
         "v7-a-stability-first"
@@ -185,6 +186,97 @@ def test_product_dry_run_records_v7_and_staged_budget_without_unknown_bypass(
     assert cost["total_provider_cost"] is None
     assert cost["projected_total_at_duration_limit"] == 2.680015
     assert results["submission_count"] == 0
+    assert keyframes["schema_version"] == "dual-keyframe-evidence/v1"
+    assert keyframes["talking_keyframe"]["keyframe_id"] == "talking"
+    assert keyframes["motion_keyframe"]["keyframe_id"] == "hero"
+    assert keyframes["talking_keyframe"]["sha256"] != keyframes["motion_keyframe"]["sha256"]
+    planned = [item for item in request["requests"] if item["responsibility"] != "voice"]
+    talking_requests = [item for item in planned if item["responsibility"] == "talking"]
+    motion_requests = [item for item in planned if item["responsibility"] == "motion"]
+    assert talking_requests and motion_requests
+    assert {
+        (item["keyframe_id"], item["keyframe_role"], item["keyframe_sha256"])
+        for item in talking_requests
+    } == {
+        (
+            "talking",
+            "talking_medium_closeup",
+            keyframes["talking_keyframe"]["sha256"],
+        )
+    }
+    assert {
+        (item["keyframe_id"], item["keyframe_role"], item["keyframe_sha256"])
+        for item in motion_requests
+    } == {
+        ("hero", "pilot_home_context", keyframes["motion_keyframe"]["sha256"])
+    }
+
+
+def test_product_dry_run_missing_talking_role_blocks_without_creating_run(
+    video_project_root: Path,
+) -> None:
+    manifest_path = video_project_root / "configs/keyframe-manifest.yaml"
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    manifest["keyframes"]["talking"]["roles"] = []
+    manifest_path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
+    before_runs = set((video_project_root / "runs").iterdir())
+
+    with pytest.raises(ExternalInputBlocked, match="approved talking_medium_closeup"):
+        preview_video(
+            video_project_root,
+            VideoRunOptions(preset="product_page", action="generate"),
+        )
+
+    assert set((video_project_root / "runs").iterdir()) == before_runs
+
+
+def test_product_live_missing_talking_role_blocks_before_provider_factory(
+    video_project_root: Path,
+    synthetic_video: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    smoke_run_id = approved_smoke_run(video_project_root, synthetic_video)
+    v7_run_id, v7_review = _reviewed_v7_parent(video_project_root, synthetic_video)
+    manifest_path = video_project_root / "configs/keyframe-manifest.yaml"
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    manifest["keyframes"]["talking"]["roles"] = []
+    manifest_path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
+    constructions: list[bool] = []
+    monkeypatch.setattr(
+        runner_module,
+        "_create_generation_providers",
+        lambda *_args, **_kwargs: constructions.append(True),
+    )
+    before_runs = set((video_project_root / "runs").iterdir())
+
+    with pytest.raises(ExternalInputBlocked, match="approved talking_medium_closeup"):
+        generate_video(
+            video_project_root,
+            VideoRunOptions(
+                preset="product_page",
+                action="generate",
+                live=True,
+                smoke_run_id=smoke_run_id,
+                smoke_review_file=approved_smoke_review(
+                    video_project_root, smoke_run_id
+                ),
+                motion_smoke_run_id=v7_run_id,
+                motion_smoke_review_file=v7_review,
+                talking_variations=1,
+                motion_variations=1,
+                max_provider_cost_usd=3.0,
+                max_runway_credits=40,
+            ),
+            environ={
+                "VIDEO_ALLOW_LIVE_CALLS": "true",
+                "VIDEO_FULL_PILOT_LIVE": "true",
+                "HEYGEN_API_KEY": "fixture-only",
+                "RUNWAYML_API_SECRET": "fixture-only",
+            },
+        )
+
+    assert constructions == []
+    assert set((video_project_root / "runs").iterdir()) == before_runs
 
 
 def test_post_tts_duration_gate_blocks_all_video_submissions(
@@ -506,7 +598,7 @@ def test_v7_wrong_keyframe_blocks_before_provider_factory(
         "promotion_record": "assets/approved_keyframes/other.json",
         "reviewer": "Synthetic test reviewer",
         "approved_at": "2026-08-21T10:00:00+08:00",
-        "roles": ["hero", "talking_medium_closeup"],
+        "roles": ["talking_medium_closeup", "pilot_home_context"],
     }
     manifest_path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
     smoke = run_talking_smoke(
@@ -554,7 +646,8 @@ def test_v7_wrong_keyframe_blocks_before_provider_factory(
                 preset="product_page",
                 action="generate",
                 live=True,
-                keyframe_id="other",
+                talking_keyframe_id="other",
+                motion_keyframe_id="other",
                 smoke_run_id=smoke.run_id,
                 smoke_review_file=smoke_review,
                 motion_smoke_run_id=v7_run_id,

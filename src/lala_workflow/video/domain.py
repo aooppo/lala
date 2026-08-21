@@ -24,6 +24,10 @@ class ApprovedKeyframe:
     source_package_sha256: str | None = None
     source_path: str | None = None
     owner_approval_reference: str | None = None
+    source_candidate_id: str | None = None
+    source_candidate_sha256: str | None = None
+    source_reference: str | None = None
+    review_file_sha256: str | None = None
     roles: tuple[str, ...] = ()
 
 

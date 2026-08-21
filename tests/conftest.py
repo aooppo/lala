@@ -118,6 +118,25 @@ def video_project_root(project_root: Path, image_factory) -> Path:
         ),
         encoding="utf-8",
     )
+    talking_keyframe = image_factory(
+        root / "assets/approved_keyframes/talking.png",
+        size=(72, 90),
+        color=(130, 35, 35),
+    )
+    talking_hash = hashlib.sha256(talking_keyframe.read_bytes()).hexdigest()
+    talking_promotion = talking_keyframe.with_suffix(".json")
+    talking_promotion.write_text(
+        json.dumps(
+            {
+                "source_run_id": "synthetic-k2-goal1-run",
+                "source_output_id": "synthetic-k2-output-001",
+                "sha256": talking_hash,
+                "reviewer": "Synthetic test reviewer",
+                "approved_at": "2026-08-19T12:00:00+08:00",
+            }
+        ),
+        encoding="utf-8",
+    )
     keyframe_manifest = {
         "project": "lady-lala",
         "status": "approved",
@@ -131,6 +150,17 @@ def video_project_root(project_root: Path, image_factory) -> Path:
                 "promotion_record": "assets/approved_keyframes/hero.json",
                 "reviewer": "Synthetic test reviewer",
                 "approved_at": "2026-08-19T12:00:00+08:00",
+                "roles": ["hero", "pilot_home_context", "establishing_keyframe"],
+            },
+            "talking": {
+                "path": "assets/approved_keyframes/talking.png",
+                "sha256": talking_hash,
+                "source_run_id": "synthetic-k2-goal1-run",
+                "source_output_id": "synthetic-k2-output-001",
+                "promotion_record": "assets/approved_keyframes/talking.json",
+                "reviewer": "Synthetic test reviewer",
+                "approved_at": "2026-08-19T12:00:00+08:00",
+                "roles": ["talking_medium_closeup"],
             }
         },
     }
